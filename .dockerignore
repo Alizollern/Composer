@@ -1,0 +1,23 @@
+# Секреты — НИКОГДА не попадают в образ
+token
+.env
+*.key
+
+# Git и OS
+.git
+.gitignore
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Рантайм-данные (создаются в контейнере/монтируются томом)
+workspace/
+memory.json
+memory_chat_*.json
+
+# Прочее
+README.md

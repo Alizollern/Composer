@@ -1,0 +1,23 @@
+# Composer AI — поднять весь бэкенд одной командой:
+#   export ANTHROPIC_API_KEY=sk-ant-...
+#   docker compose up --build
+# API будет на http://localhost:8000  (Swagger: /docs)
+
+services:
+  composer:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Ключ берётся из окружения хоста, в образ НЕ зашивается.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - COMPOSER_MODEL=${COMPOSER_MODEL:-claude-sonnet-4-5}
+      - COMPOSER_MAX_TOKENS=${COMPOSER_MAX_TOKENS:-4096}
+      - COMPOSER_MAX_STEPS=${COMPOSER_MAX_STEPS:-20}
+    volumes:
+      # Агенты — это папки. Монтируем, чтобы create_agent сохранял их на хост
+      # и можно было добавлять агентов без пересборки образа.
+      - ./agents:/app/agents
+      # Результаты работы агентов сохраняются на хост.
+      - ./workspace:/app/workspace
+    restart: unless-stopped
