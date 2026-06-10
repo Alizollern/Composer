@@ -1,0 +1,18 @@
+# Секреты — НИКОГДА не коммитим
+token
+.env
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Рантайм-данные
+memory.json
+memory_chat_*.json
+workspace/
+
+# OS
+.DS_Store

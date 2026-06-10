@@ -1,0 +1,6 @@
+# Порядок агентов в пайплайне оркестратора (по строке на агента).
+# Это просто имена папок из agents/. Меняй порядок/состав как угодно.
+# employee_assistant сюда НЕ ставим — он для чата (python3 chat.py employee_assistant).
+standards_creator
+standards_editor
+advisor
