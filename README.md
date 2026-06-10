@@ -3,91 +3,105 @@
 > **Для людей и для агентов.** Этот файл — единый источник правды о проекте.
 > Если ты ИИ-агент, который зашёл в репозиторий: прочитай README целиком — здесь
 > описано, что это за проект, как он устроен, как его запускать и как его расширять,
-> не меняя ядро.
+> **не меняя ядро**.
 
 ---
 
 ## 1. Что это за проект
 
-**Composer AI** — платформа, которая позволяет **не-разработчику создавать ИИ-агентов**.
-Идея: *«harness as infrastructure»* — пользователь пишет промпт и описание роли, а
-вся архитектура (вызов модели, цикл рассуждения, память, инструменты, оркестрация)
-уже готова на платформе. Человек не пишет код — он **добавляет папку с агентом**.
+**Composer AI** — платформа, которая позволяет **не-разработчику создавать и
+запускать ИИ-агентов**. Идея: *«harness as infrastructure»* — пользователь
+описывает агента словами, а вся инженерия (вызов модели, цикл рассуждения, память,
+инструменты, оркестрация, параллелизм, наблюдаемость) **уже готова на платформе**.
 
-### Текущая вертикаль (то, что реализовано сейчас)
+Платформа **доменно-независимая**. Поверх неё можно собрать что угодно: ресёрч,
+поддержку решений, генерацию документов, автоматизацию процессов. Конкретная
+вертикаль (например, «двойник CEO» для сети кофеен) — это просто **набор папок с
+агентами**, а не отдельный код.
 
-Первая узкая ниша для MVP/питча — **«Цифровой двойник CEO» для сети кофеен**
-(демо-клиент: **АлматыКофе**, 3 филиала, Казахстан). Это пайплайн из
-специализированных агентов, которые:
+Три вещи, которые делают это платформой, а не скриптом:
 
-1. **Создают стандарты обслуживания** — читают стандарты мировых брендов
-   (Starbucks, McDonald's и т.д.) **из интернета** и адаптируют под клиента.
-2. **Редактируют/обновляют стандарты** при появлении новых данных.
-3. **Советуют decision-maker'у** (поддержка управленческих решений).
-4. **Псевдо-GPT для сотрудников** — чат, где сотрудник может спросить про стандарты
-   и рабочие моменты.
-
-У каждого агента — **свои навыки (skills) и своя база знаний (knowledge)**.
+1. **Агенты — это папки, а не код.** Добавил папку → агент появился.
+2. **Динамическая оркестрация.** Агент-оркестратор сам решает, каких суб-агентов
+   звать и в каком порядке; независимые задачи идут **параллельно**.
+3. **Интеграции — это плагины.** Положил файл в `integrations/` → у агентов
+   появился новый инструмент. Ядро не трогаешь.
 
 ---
 
-## 2. Архитектура: 4 «шва» (seams)
+## 2. Архитектура: 4 «шва» (seams) + оркестрация
 
-Ядро построено на четырёх абстракциях. Каждую можно заменить, не трогая остальные.
+Ядро построено на четырёх абстракциях — каждую можно заменить, не трогая остальные.
 
 | # | Шов | Где | Что делает |
 |---|-----|-----|------------|
-| 1 | **LLM-провайдер** | `composer/engine/providers.py` | Абстракция над моделью. `LLMProvider` (ABC) → `ClaudeProvider`. Нормализует ответ к `{"text", "tool_calls", "stop_reason", "raw_content"}`. Фабрика `get_provider(name)`. |
-| 2 | **Цикл агента** | `composer/engine/loop.py` | `run_agent(...)` — цикл «модель → инструменты → модель», пока не закончит. Эмитит **события** через `on_event`. |
-| 3 | **Память** | `composer/engine/memory.py` | `Memory` (ABC) → `JSONMemory(path)`. Read/write истории. |
-| 4 | **Инструменты** | `composer/tools/registry.py` | Подключаемые тулзы: workspace-файлы, база знаний, веб-поиск. |
+| 1 | **LLM-провайдер** | `composer/engine/providers.py` | Абстракция над моделью. `LLMProvider` (ABC) → `ClaudeProvider`. Нормализует ответ к `{"text","tool_calls","stop_reason","raw_content"}`. Фабрика `get_provider(name)`. |
+| 2 | **Цикл агента** | `composer/engine/loop.py` | `run_agent(...)` — цикл «модель → инструменты → модель». Эмитит **события** через `on_event`. Поддерживает `parallel_tools=True` — несколько инструментов/суб-агентов за один ход исполняются **одновременно** в пуле потоков. |
+| 3 | **Память** | `composer/engine/memory.py` | `Memory` (ABC) → `JSONMemory` (на диск) и `InMemoryMemory` (эфемерная, для суб-прогонов). |
+| 4 | **Инструменты** | `composer/tools/` | `registry.py` — базовые (workspace / knowledge / web). `base.py` — **реестр интеграций** (плагины). |
 
 ### Событийный движок = адаптивность
 
-`run_agent` не печатает в консоль — он **эмитит события** (`{"type": "text" / "tool_call" / "tool_result" / ...}`)
-через колбэк `on_event`. Благодаря этому **один и тот же движок** обслуживает:
-- **CLI** (`cli.py` → `render(event)` печатает в терминал),
-- **API** (`composer/api/app.py` → события копятся в `RUNS[run_id]["events"]`, фронт их поллит).
+`run_agent` ничего не печатает — он **эмитит события** (`text`, `tool_call`,
+`tool_result`, `subagent_start`, `subagent_done`) через колбэк `on_event`. Поэтому
+**один движок** обслуживает: CLI (рендер в терминал), API (поллинг) и **SSE-стрим**
+(события в реальном времени во фронтенд).
 
-### Оркестратор (паттерн orchestrator-worker)
+### Оркестрация — два режима
 
-`composer/orchestration/orchestrator.py`:
-- `load_pipeline()` / `set_pipeline(order)` — порядок агентов читается из `pipeline.txt`.
-- `orchestrate(goal, on_event=None, llm=None)` — прогоняет агентов по очереди, возвращает
-  `{"goal", "pipeline", "agents", "files"}`.
-- **Детерминированное сохранение результата:** оркестратор сам пишет финальный текст
-  агента в файл из `output.txt` (если текст ≥ 100 символов). Это убирает зависимость
-  от того, вызовет ли модель `write_file`. Агенты обмениваются результатами через файлы
-  в `workspace/` (паттерн «blackboard / references-not-content»).
+`composer/orchestration/`:
+
+- **Динамический (главный)** — `planner.orchestrate_dynamic(goal)`.
+  Запускается **агент-оркестратор**, у которого суб-агенты подключены как
+  инструменты `delegate_to_<имя>` (см. `agent_tools.py`). Он сам декомпозирует цель
+  и делегирует; вызвав несколько `delegate_*` за один ход — запускает суб-агентов
+  **параллельно**. Поддерживается вложенность (суб-агент сам может быть
+  оркестратором) с защитой по глубине. Если папки `orchestrator` нет — оркестратор
+  **синтезируется** на лету над всеми агентами.
+- **Линейный (legacy)** — `orchestrator.orchestrate(goal)`. Прогоняет агентов по
+  порядку из `pipeline.txt`. Прост и предсказуем; оставлен для совместимости.
+
+`runner.run_agent_by_name(name, task)` — универсальный запуск одного агента
+(с авто-подключением суб-агентов, если они есть в манифесте).
 
 ### Раскладка пакета
 
 ```
 composer-ai/
 ├── composer/                      # ← ЯДРО (код менять только здесь)
-│   ├── config.py                  # пути, MODEL, MAX_TOKENS, MAX_STEPS (через env)
+│   ├── config.py                  # пути, модель, лимиты, параллелизм
 │   ├── engine/
 │   │   ├── providers.py           # Шов 1: LLM-провайдер
-│   │   ├── loop.py                # Шов 2: run_agent + события
-│   │   └── memory.py              # Шов 3: память
+│   │   ├── loop.py                # Шов 2: run_agent + параллельные инструменты
+│   │   ├── memory.py              # Шов 3: JSONMemory / InMemoryMemory
+│   │   └── runs.py                # хранилище прогонов + подписка для SSE
 │   ├── tools/
-│   │   └── registry.py            # Шов 4: workspace / knowledge / web-инструменты
+│   │   ├── registry.py            # Шов 4: workspace / knowledge / web
+│   │   ├── base.py                # реестр интеграций (@integration)
+│   │   └── integrations/          # ← ПЛАГИНЫ: drop-in инструменты
+│   │       ├── http_api.py        #   универсальный HTTP-запрос к любому API
+│   │       └── kv_store.py        #   персистентный key-value стор
 │   ├── agents/
-│   │   └── loader.py              # discover/load/describe/create агентов из ПАПОК
+│   │   └── loader.py              # агенты из папок (+ манифест agent.json)
 │   ├── orchestration/
-│   │   └── orchestrator.py        # пайплайн + детерминированное сохранение
+│   │   ├── agent_tools.py         # делегирование: агент как инструмент
+│   │   ├── runner.py              # запуск одного агента по имени
+│   │   ├── planner.py             # динамическая оркестрация (главный режим)
+│   │   └── orchestrator.py        # линейный pipeline (legacy)
 │   └── api/
-│       └── app.py                 # FastAPI REST для фронта (Lovable)
+│       └── app.py                 # FastAPI REST + SSE для фронта (Lovable)
 │
 ├── agents/                        # ← ДАННЫЕ (агенты = папки, не код)
-│   ├── standards_creator/
-│   ├── standards_editor/
-│   ├── advisor/
-│   └── employee_assistant/
+│   ├── orchestrator/              # управляющий: делегирует researcher/analyst/writer
+│   ├── researcher/                # ресёрч из интернета (web)
+│   ├── analyst/                   # анализ данных (+ kv интеграции)
+│   ├── writer/                    # оформление финального документа
+│   └── standards_creator/ …       # пример вертикали (стандарты для кофейни)
 │
-├── workspace/                     # результаты работы агентов (в .gitignore)
-├── pipeline.txt                   # порядок агентов в пайплайне
+├── workspace/                     # результаты + .runs/ + .kv.json (в .gitignore)
+├── pipeline.txt                   # порядок для линейного режима
 ├── cli.py                         # терминальный интерфейс
+├── Dockerfile / docker-compose.yml
 └── requirements.txt
 ```
 
@@ -95,41 +109,76 @@ composer-ai/
 
 ## 3. Агент = папка (как добавить нового, не трогая код)
 
-Агенты **не захардкожены**. Чтобы добавить агента — создай папку `agents/<имя>/`:
-
 ```
 agents/<имя>/
 ├── role.md          # кто агент и что делает (становится system-промптом)
-├── skills/*.md      # навыки — каждый .md склеивается в промпт под заголовком навыка
+├── skills/*.md      # навыки — склеиваются в промпт
 ├── knowledge/...     # приватная база знаний агента (его «источник правды»)
-├── tools.txt        # (опц.) строка "web_search" → подключить веб-поиск + чтение страниц
-└── output.txt       # (опц.) имя файла-результата в workspace/ (напр. standards.md)
+└── agent.json       # (опц.) манифест — см. ниже
 ```
 
-`composer/agents/loader.py` собирает из этого system-промпт и набор инструментов:
-- `discover_agents()` — список имён (= имена папок).
-- `load_agent(name)` — собирает `{"name", "system", "tools", "folder", "output"}`.
-  System = `BASE_PREAMBLE` + `role.md` + все `skills/*.md`. Всегда есть workspace- и
-  knowledge-инструменты; web-инструменты добавляются, если в `tools.txt` есть `web_search`.
-- `describe_agent(name)` — карточка для фронта: `{name, description, skills, web, output}`.
-- `create_agent(name, role, skills, knowledge, web, output)` — **фронт создаёт агента**
-  через API, файлы пишутся на диск автоматически.
+### Манифест `agent.json` (необязательный, но мощный)
+
+```json
+{
+  "description": "Что делает агент (для карточки и для оркестратора).",
+  "model": "claude-...",            // переопределить модель для этого агента
+  "web": true,                       // подключить веб-поиск (web_search/fetch_url)
+  "integrations": ["http_request"],  // подключить интеграции из реестра
+  "subagents": ["researcher", "writer"],  // делает агента ОРКЕСТРАТОРОМ
+  "parallel": true,                  // делегировать суб-агентам параллельно
+  "output": "result.md"              // детерминированно сохранить результат в workspace/
+}
+```
+
+Без `agent.json` работает legacy-режим: `tools.txt` (строка `web_search`) и
+`output.txt` (имя файла-результата).
+
+**Ключевая идея:** если в манифесте есть `subagents` — агент автоматически получает
+инструменты `delegate_to_<имя>` и становится оркестратором. Так строится иерархия
+агентов без единой строчки кода.
 
 ### Текущие агенты
 
-| Агент | Роль | web | output | skills |
-|-------|------|-----|--------|--------|
-| `standards_creator` | Читает стандарты мировых брендов из интернета, адаптирует под клиента | ✅ | `standards.md` | research_world_brands, adapt_to_client |
-| `standards_editor`  | Обновляет стандарты при новых данных | ✅ | `standards.md` | update_standards |
-| `advisor`           | Поддержка решений для decision-maker | — | `decisions.md` | decision_options |
-| `employee_assistant`| Псевдо-GPT чат для сотрудников (читает `standards.md`) | — | — | answer_about_standards |
-
-`pipeline.txt`: `standards_creator → standards_editor → advisor`
-(`employee_assistant` — только чат, вне пайплайна).
+| Агент | Роль | оркестратор | web / интеграции |
+|-------|------|:-----------:|------------------|
+| `orchestrator` | Декомпозирует цель, делегирует, собирает итог | ✅ (researcher/analyst/writer) | — |
+| `researcher` | Собирает факты из интернета | — | web |
+| `analyst` | Анализ, выводы, расчёты | — | kv_get/kv_set |
+| `writer` | Оформляет финальный документ | — | — |
+| `standards_creator` / `standards_editor` / `advisor` / `employee_assistant` | Пример вертикали «кофейня» | — | web (часть) |
 
 ---
 
-## 4. Как запустить
+## 4. Интеграции — как добавить (точка роста проекта)
+
+Чтобы дать агентам новый инструмент (Slack, Notion, CRM, любой REST API) —
+**положи файл в `composer/tools/integrations/`** и повесь декоратор. Он
+зарегистрируется сам, ядро менять не нужно.
+
+```python
+# composer/tools/integrations/my_service.py
+from composer.tools.base import integration
+
+@integration(
+    name="my_tool",
+    description="Что делает инструмент (это видит модель).",
+    input_schema={"type": "object",
+                  "properties": {"q": {"type": "string"}},
+                  "required": ["q"]},
+    category="my_category",
+)
+def my_tool(inp: dict) -> str:
+    return f"результат для {inp['q']}"
+```
+
+Дальше указываешь `"integrations": ["my_tool"]` в `agent.json` нужного агента.
+Готовые интеграции: `http_request` (любой REST API), `kv_set` / `kv_get`
+(персистентное состояние).
+
+---
+
+## 5. Как запустить
 
 ```bash
 # 1. Зависимости
@@ -139,71 +188,156 @@ pip3 install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # 3a. API-сервер (для фронта на Lovable)
-python3 -m uvicorn composer.api.app:app --port 8000
-#     → Swagger/тест: http://localhost:8000/docs
+python3 -m uvicorn composer.api.app:app --port 8000   # Swagger: /docs
 
-# 3b. ИЛИ терминал (для разработки/проверки без фронта)
-python3 cli.py agents                 # список агентов
-python3 cli.py run "создать стандарты обслуживания на основе Starbucks"
-python3 cli.py chat employee_assistant
+# 3b. ИЛИ Docker
+docker compose up --build                              # http://localhost:8000
+
+# 3c. ИЛИ терминал
+python3 cli.py agents                                  # список агентов
+python3 cli.py integrations                            # список интеграций
+python3 cli.py orchestrate "сделай обзор рынка кофеен в Алматы"   # динамика
+python3 cli.py agent researcher "найди стандарты Starbucks"       # один агент
+python3 cli.py run "создать стандарты обслуживания"              # линейный режим
+python3 cli.py chat employee_assistant                           # чат
 ```
 
-### Конфиг (env-переменные, см. `composer/config.py`)
+### Конфиг (env, см. `composer/config.py`)
 
 | Переменная | Дефолт | Назначение |
 |-----------|--------|------------|
 | `ANTHROPIC_API_KEY` | — | ключ к модели (обязателен) |
-| `COMPOSER_MODEL` | `claude-sonnet-4-5` | модель |
+| `COMPOSER_MODEL` | `claude-sonnet-4-5` | модель по умолчанию |
 | `COMPOSER_MAX_TOKENS` | `4096` | макс. токенов в ответе |
 | `COMPOSER_MAX_STEPS` | `20` | макс. шагов цикла агента |
+| `COMPOSER_MAX_PARALLEL` | `5` | сколько инструментов/агентов параллельно |
+| `COMPOSER_MAX_DEPTH` | `2` | глубина вложенного делегирования |
+| `COMPOSER_ORCHESTRATOR` | `orchestrator` | агент-оркестратор по умолчанию |
 
-> **Python 3.9-совместимость:** в коде НЕ используем синтаксис 3.10+ (`str | None`,
-> `list[str]`). Только `typing.Optional/List/Dict`.
+> **Python 3.9-совместимость:** в коде НЕ используем синтаксис 3.10+
+> (`str | None`, `list[str]`). Только `typing.Optional/List/Dict`.
 
 ---
 
-## 5. API-контракт (для фронтенда Lovable)
+## 6. API-контракт (для фронтенда Lovable)
 
 База: `http://localhost:8000`. CORS открыт (`allow_origins=["*"]`, dev-режим).
 
 | Метод | Путь | Тело / параметры | Ответ |
 |-------|------|------------------|-------|
 | GET  | `/api/health` | — | `{"status":"ok"}` |
-| GET  | `/api/agents` | — | список карточек: `[{name, description, skills, web, output}]` |
-| POST | `/api/agents` | `{name, role, skills?, knowledge?, web?, output?}` | карточка созданного агента |
-| GET  | `/api/pipeline` | — | `{"order": [...]}` |
-| PUT  | `/api/pipeline` | `{order: [...]}` | `{"order": [...]}` |
-| POST | `/api/run` | `{goal: str}` | `{"run_id": "..."}` (запуск в фоне) |
-| GET  | `/api/run/{run_id}` | — | `{status, events, results, error}` — **поллить** до `status="done"` |
+| GET  | `/api/agents` | — | `[{name, description, skills, web, integrations, subagents, is_orchestrator, model, output}]` |
+| GET  | `/api/agents/{name}` | — | карточка одного агента |
+| POST | `/api/agents` | `{name, role, description?, skills?, knowledge?, web?, integrations?, subagents?, model?, parallel?, output?}` | карточка |
+| POST | `/api/agents/{name}/run` | `{task}` | `{"run_id": "..."}` (фон) |
+| GET  | `/api/integrations` | — | `[{name, description, category}]` |
+| GET  | `/api/pipeline` | — | `{"order":[...]}` |
+| PUT  | `/api/pipeline` | `{order:[...]}` | `{"order":[...]}` |
+| POST | `/api/run` | `{goal, mode:"dynamic"\|"pipeline", orchestrator?}` | `{"run_id": "..."}` (фон) |
+| GET  | `/api/run/{run_id}` | — | `{id, kind, goal, status, events, results, error, created}` — поллинг |
+| GET  | `/api/run/{run_id}/stream` | — | **SSE**: `data: {event}\n\n` в реальном времени, финал — `{"type":"end"}` |
+| GET  | `/api/runs` | — | `{"runs":[...]}` история прогонов |
 | POST | `/api/chat` | `{agent, message, session_id?}` | `{session_id, reply, events}` |
-| GET  | `/api/files` | — | `{"files": [...]}` (содержимое `workspace/`) |
+| GET  | `/api/files` | — | `{"files":[...]}` |
 | GET  | `/api/files/{name}` | — | `{name, content}` |
 
-**Паттерн запуска пайплайна:** `POST /api/run` → получаешь `run_id` →
-поллишь `GET /api/run/{run_id}`, пока `status` не станет `done` (или `error`).
-В `events` — лог в реальном времени, в `results.files` — готовые документы.
+**Паттерн запуска:** `POST /api/run` → `run_id` → либо поллить
+`GET /api/run/{run_id}` до `status="done"`, либо подписаться на
+`GET /api/run/{run_id}/stream` (SSE) и показывать события вживую. Готовые
+документы — в `results.files`.
 
-**Хранилища:** `RUNS` и `SESSIONS` — пока **в памяти процесса** (MVP). Для прода — БД.
-Стриминг сейчас через поллинг; апгрейд до SSE — возможное улучшение.
+**Типы событий в потоке:** `start`, `text`, `tool_call`, `tool_result`,
+`subagent_start` (агент начал), `subagent_done` (агент закончил), `saved`, `done`.
+У вложенных событий есть `agent` и `depth` — можно рисовать дерево делегирования.
+
+**Хранилища:** `SESSIONS` — в памяти; прогоны (`runs`) персистятся на диск
+(`workspace/.runs/`) и переживают рестарт. Для прода — вынести в БД.
 
 ---
 
-## 6. Безопасность (ВАЖНО для агентов и людей)
+## 7. Безопасность (ВАЖНО)
 
-- **Никогда не коммить секреты.** Файл `token`, `.env`, `*.key` — в `.gitignore`.
+- **Никогда не коммить секреты.** Файл `token`, `.env`, `*.key` — в `.gitignore`
+  и `.dockerignore`.
 - **Ключ API — только через `export ANTHROPIC_API_KEY=...`**, не в файлах репозитория.
-- `workspace/`, `memory.json`, `memory_chat_*.json` — рантайм-данные, тоже в `.gitignore`.
+- `workspace/` (включая `.runs/`, `.kv.json`), `memory.json`, `memory_chat_*.json` —
+  рантайм-данные, в `.gitignore`.
 
 ---
 
-## 7. Состояние и что делать дальше
+## 8. Состояние и что делать дальше
 
-**Сделано:** чистая архитектура (4 шва), событийный движок, агенты-папки,
-детерминированное сохранение результатов, реальный веб-поиск (`ddgs` с фолбэком по
-бэкендам), FastAPI-бэкенд с документированным контрактом.
+**Сделано:** чистое ядро (4 шва), событийный движок с **параллельным** исполнением
+инструментов, агенты-папки с манифестом, **динамическая оркестрация с делегированием**
+и параллельными суб-агентами, **реестр интеграций-плагинов** (http + kv),
+персист прогонов, FastAPI + **SSE-стрим**, доменно-независимые агенты + пример
+вертикали, Docker, CLI. Механика оркестрации/параллелизма проверена тестом.
 
-**Дальше:**
-- Фронт на Lovable против этого API.
-- (Опц.) SSE-стриминг вместо поллинга.
-- (Опц.) Замена in-memory `RUNS`/`SESSIONS` на БД.
-- Расширение библиотеки агентов (просто добавляя папки в `agents/`).
+**Дальше (точки расширения):**
+- Новые интеграции (Slack/Notion/CRM/БД) — просто файлы в `integrations/`.
+- Новые агенты и оркестраторы — просто папки в `agents/`.
+- Мультимодельность — добавить провайдеры в `providers.py` (фабрика готова).
+- Прод-хранилище прогонов/сессий (БД вместо памяти/файлов).
+- Фронт на Lovable против этого API (поллинг или SSE).
+
+---
+
+## 9. Журнал сборки — переход от MVP к платформе
+
+Эта итерация превратила проект из линейного пайплайна (4 захардкоженных под кофейню
+агента) в **доменно-независимую платформу агентов**. Что именно сделано:
+
+### Ядро / движок
+- **Параллельное исполнение инструментов** в `engine/loop.py`: флаг
+  `parallel_tools=True` — когда модель за один ход просит несколько инструментов или
+  суб-агентов, они выполняются одновременно (ThreadPoolExecutor, порядок результатов
+  сохраняется). Это основа параллельных агентов. *Проверено тестом: 3 суб-агента
+  стартуют в один момент.*
+- **`InMemoryMemory`** в `engine/memory.py` — эфемерная память для одноразовых
+  суб-прогонов (суб-агенты не пишут на диск).
+- **`engine/runs.py`** (новый) — хранилище прогонов: статус, события, результаты;
+  потокобезопасная рассылка событий подписчикам (для SSE); персист на диск
+  (`workspace/.runs/`), переживает рестарт.
+
+### Оркестрация (новый пакет-логика)
+- **`orchestration/agent_tools.py`** (новый) — делегирование «агент как инструмент»:
+  `make_agent_tools()` создаёт инструменты `delegate_to_<имя>`. Поддержка вложенности
+  с защитой по глубине (`MAX_DELEGATION_DEPTH`).
+- **`orchestration/runner.py`** (новый) — `run_agent_by_name()`: универсальный запуск
+  одного агента, авто-подключение суб-агентов, детерминированное сохранение output.
+- **`orchestration/planner.py`** (новый) — `orchestrate_dynamic()`: главный режим.
+  Агент-оркестратор сам декомпозирует цель и делегирует (параллельно). Если папки
+  оркестратора нет — он синтезируется на лету над всеми агентами.
+- Линейный `orchestration/orchestrator.py` сохранён как legacy.
+
+### Инструменты и интеграции
+- **`tools/base.py`** (новый) — реестр интеграций-плагинов: декоратор
+  `@integration`, ленивая авто-загрузка модулей. Добавление интеграции = новый файл,
+  ядро не меняется.
+- **`tools/integrations/http_api.py`** (новый) — интеграция `http_request` (любой
+  REST API).
+- **`tools/integrations/kv_store.py`** (новый) — интеграции `kv_set` / `kv_get`
+  (персистентное состояние, `workspace/.kv.json`).
+
+### Агенты
+- **Манифест `agent.json`** в `agents/loader.py`: `model`, `web`, `integrations`,
+  `subagents`, `parallel`, `output`, `description`. Наличие `subagents` автоматически
+  делает агента оркестратором. `create_agent()` расширен под все эти поля.
+- Добавлены **доменно-независимые агенты**: `orchestrator`, `researcher`, `analyst`,
+  `writer`. Кофейные агенты оставлены как пример вертикали.
+
+### API / интерфейсы
+- `api/app.py` расширен с 9 до 19 роутов: запуск одного агента, список интеграций,
+  карточка агента, история прогонов, **SSE-стрим** (`/api/run/{id}/stream`),
+  режим `dynamic` | `pipeline` в `/api/run`.
+- `cli.py`: команды `orchestrate`, `agent <имя>`, `integrations`; рендер новых
+  событий делегирования с отступами по глубине (дерево).
+- `config.py`: новые параметры `MAX_PARALLEL`, `MAX_DELEGATION_DEPTH`,
+  `ORCHESTRATOR_AGENT`, пути `RUNS_DIR`, `KV_FILE`.
+
+### Проверка
+- Все модули компилируются и импортируются; API поднимает 19 роутов.
+- Механика оркестрации и параллелизма проверена тестом на фейковом провайдере
+  (без расхода токенов).
+- Путь до реального Anthropic SDK корректен (live-вызов дошёл до API; вернул 401 —
+  ключ в файле `token` уже отозван/невалиден, нужен новый `ANTHROPIC_API_KEY`).

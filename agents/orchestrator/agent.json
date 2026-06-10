@@ -1,0 +1,6 @@
+{
+  "description": "Управляющий агент: декомпозирует цель и делегирует суб-агентам (в т.ч. параллельно).",
+  "subagents": ["researcher", "analyst", "writer"],
+  "parallel": true,
+  "output": "result.md"
+}

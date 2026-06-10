@@ -63,30 +63,98 @@ def make_workspace_tools():
     ]
 
 
-# ---------- Личная база знаний агента ----------
-def make_knowledge_tools(knowledge_dir):
-    kd = Path(knowledge_dir)
-    kd.mkdir(parents=True, exist_ok=True)
+# ---------- База знаний агента (приватная + общие домены) ----------
+def make_knowledge_tools(roots):
+    """roots: путь (приватная база) ИЛИ список (label, path).
+
+    Первый корень — приватная база агента (туда пишет save_knowledge).
+    Остальные — общие домены из корневого knowledge/ (только чтение).
+    Файлы адресуются как "<label>/<путь>", напр. "Starbucks/look_book.md".
+    """
+    if isinstance(roots, (str, Path)):
+        roots = [("self", Path(roots))]
+    roots = [(label, Path(p)) for label, p in roots]
+    # приватную базу создаём, общие — только если есть
+    roots[0][1].mkdir(parents=True, exist_ok=True)
+
+    def _iter():
+        for label, base in roots:
+            if not base.is_dir():
+                continue
+            for f in base.rglob("*"):
+                if f.is_file() and f.suffix.lower() in (".md", ".txt"):
+                    yield label, base, f
+
+    def _resolve(path):
+        for label, base in roots:
+            rel = path[len(label) + 1:] if path.startswith(label + "/") else path
+            try:
+                p = _safe(base, rel)
+            except ValueError:
+                continue
+            if p.exists():
+                return p
+        return None
 
     def list_knowledge(_=None):
-        fs = [str(f.relative_to(kd)) for f in kd.rglob("*") if f.is_file()]
+        fs = sorted(f"{label}/{f.relative_to(base)}" for label, base, f in _iter())
         return "\n".join(fs) if fs else "База знаний пуста"
 
-    def read_knowledge(path):
-        p = _safe(kd, path)
-        return p.read_text() if p.exists() else f"В базе знаний нет {path}"
+    def read_knowledge(path, max_chars=15000):
+        p = _resolve(path)
+        if not p:
+            return f"В базе знаний нет {path}"
+        text = p.read_text(encoding="utf-8", errors="ignore")
+        if len(text) > max_chars:
+            return (text[:max_chars] +
+                    f"\n\n…[обрезано: показано {max_chars} из {len(text)} символов. "
+                    "Используй search_knowledge, чтобы найти нужный фрагмент в этом файле.]")
+        return text
 
     def save_knowledge(path, content):
-        p = _safe(kd, path)
+        base0 = roots[0][1]
+        p = _safe(base0, path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content)
         return f"Сохранено в базу знаний: {path}"
+
+    def search_knowledge(query, top=6):
+        """Лёгкий поиск по всем доступным базам: ранжируем по совпадению слов,
+        возвращаем имена + фрагменты. Агент не читает всё подряд (экономит токены)."""
+        terms = [t for t in re.split(r"\W+", query.lower()) if len(t) > 2]
+        if not terms:
+            return "Уточни запрос (нужны слова длиннее 2 символов)."
+        scored = []
+        for label, base, f in _iter():
+            try:
+                text = f.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            low = text.lower()
+            score = sum(low.count(t) for t in terms)
+            if score:
+                pos = min((low.find(t) for t in terms if low.find(t) >= 0), default=0)
+                snippet = text[max(0, pos - 120): pos + 280].replace("\n", " ").strip()
+                scored.append((score, f"{label}/{f.relative_to(base)}", snippet))
+        if not scored:
+            return f"По запросу «{query}» в базе знаний ничего не найдено."
+        scored.sort(reverse=True)
+        return "\n\n".join(f"• {name} (совпадений: {score})\n  …{snippet}…"
+                           for score, name, snippet in scored[:top])
 
     return [
         {"schema": {"name": "list_knowledge",
                     "description": "Список файлов в собственной базе знаний агента.",
                     "input_schema": {"type": "object", "properties": {}}},
          "fn": lambda i: list_knowledge()},
+        {"schema": {"name": "search_knowledge",
+                    "description": ("Найти в базе знаний релевантные документы по "
+                                    "ключевым словам. Возвращает имена файлов и "
+                                    "фрагменты. Используй ПЕРЕД read_knowledge, чтобы "
+                                    "не читать всё подряд."),
+                    "input_schema": {"type": "object", "properties": {
+                        "query": {"type": "string"}}, "required": ["query"]}},
+         "fn": lambda i: search_knowledge(i["query"])},
         {"schema": {"name": "read_knowledge",
                     "description": "Прочитать файл из собственной базы знаний.",
                     "input_schema": {"type": "object", "properties": {
@@ -121,7 +189,7 @@ def _web_search(query, n=5):
     return f"Поиск не дал результатов (последняя ошибка: {last_err})."
 
 
-def _fetch_url(url, max_chars=6000):
+def _fetch_url(url, max_chars=2500):
     req = urllib.request.Request(url, headers=_UA)
     raw = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "ignore")
     raw = re.sub(r"(?is)<(script|style|nav|footer|header).*?</\1>", " ", raw)

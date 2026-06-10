@@ -1,0 +1,7 @@
+{
+  "description": "Создаёт стандарты обслуживания: изучает эталоны мировых брендов и адаптирует под клиента.",
+  "web": true,
+  "output": "standards.md",
+  "knowledge_refs": ["Starbucks"],
+  "max_steps": 14
+}

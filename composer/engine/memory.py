@@ -28,3 +28,16 @@ class JSONMemory(Memory):
     def write(self, key, value):
         self.data[key] = value
         self.path.write_text(json.dumps(self.data, ensure_ascii=False, indent=2))
+
+
+class InMemoryMemory(Memory):
+    """Эфемерная память для одноразовых суб-прогонов (ничего не пишет на диск)."""
+
+    def __init__(self):
+        self.data = {}
+
+    def read(self, key):
+        return self.data.get(key)
+
+    def write(self, key, value):
+        self.data[key] = value
