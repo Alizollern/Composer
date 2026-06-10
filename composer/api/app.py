@@ -38,10 +38,11 @@ from typing import Optional, List, Dict
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from composer.config import WORKSPACE
+from composer.config import WORKSPACE, ROOT
 from composer.engine.providers import ClaudeProvider
 from composer.engine.memory import JSONMemory
 from composer.engine.loop import run_agent
@@ -55,6 +56,7 @@ from composer.orchestration.orchestrator import (
 )
 from composer.orchestration.planner import orchestrate_dynamic
 from composer.orchestration.runner import run_agent_by_name
+from composer import companies
 
 app = FastAPI(title="Composer AI API", version="0.2.0")
 
@@ -72,10 +74,21 @@ class RunRequest(BaseModel):
     goal: str
     mode: str = "dynamic"            # "dynamic" (оркестратор-агент) | "pipeline" (линейно)
     orchestrator: Optional[str] = None
+    company: Optional[str] = None    # slug компании: прогон скоупится на её папку
 
 
 class AgentRunRequest(BaseModel):
     task: str
+    company: Optional[str] = None
+
+
+class CompanyRequest(BaseModel):
+    name: str
+    profile: Optional[str] = None
+
+
+class ProfileRequest(BaseModel):
+    content: str
 
 
 class ChatRequest(BaseModel):
@@ -140,7 +153,8 @@ def run_single_agent(name: str, req: AgentRunRequest):
 
     def work():
         try:
-            res = run_agent_by_name(name, req.task, on_event=run.emit)
+            res = run_agent_by_name(name, req.task, on_event=run.emit,
+                                    company=req.company)
             run.finish(results=res)
         except Exception as e:
             run.finish(error=str(e))
@@ -153,6 +167,41 @@ def run_single_agent(name: str, req: AgentRunRequest):
 @app.get("/api/integrations")
 def integrations():
     return list_integrations()
+
+
+# ---------- Компании (мульти-тенант) ----------
+@app.get("/api/companies")
+def get_companies():
+    return {"companies": companies.list_companies()}
+
+
+@app.post("/api/companies")
+def create_company(req: CompanyRequest):
+    return companies.create_company(req.name, profile=req.profile or "")
+
+
+@app.get("/api/companies/{slug}")
+def company_detail(slug: str):
+    c = companies.get_company(slug)
+    if not c:
+        raise HTTPException(404, f"Нет компании {slug}")
+    return c
+
+
+@app.put("/api/companies/{slug}/profile")
+def company_profile(slug: str, req: ProfileRequest):
+    c = companies.update_profile(slug, req.content)
+    if not c:
+        raise HTTPException(404, f"Нет компании {slug}")
+    return c
+
+
+@app.get("/api/companies/{slug}/files/{name:path}")
+def company_file(slug: str, name: str):
+    content = companies.read_file(slug, name)
+    if content is None:
+        raise HTTPException(404, "Файл не найден")
+    return {"name": name, "content": content}
 
 
 # ---------- Пайплайн (legacy линейный режим) ----------
@@ -177,7 +226,8 @@ def start_run(req: RunRequest):
                 res = orchestrate(req.goal, on_event=run.emit)
             else:
                 res = orchestrate_dynamic(
-                    req.goal, orchestrator=req.orchestrator, on_event=run.emit)
+                    req.goal, orchestrator=req.orchestrator,
+                    on_event=run.emit, company=req.company)
             run.finish(results=res)
         except Exception as e:
             run.finish(error=str(e))
@@ -261,3 +311,33 @@ def get_workspace_file(name: str):
 # ---------- helpers ----------
 def _sse(obj):
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+
+
+# ---------- Фронтенд (Evergreen, React+Vite) ----------
+# Регистрируется ПОСЛЕ всех /api-роутов, чтобы SPA-catch-all их не перехватывал.
+# Собранный фронт лежит в frontend/dist (npm run build). Если сборки ещё нет —
+# подсказываем, как собрать.
+WEB_DIST = ROOT / "frontend" / "dist"
+
+if (WEB_DIST / "index.html").exists():
+    _assets = WEB_DIST / "assets"
+    if _assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_assets)), name="assets")
+
+    @app.get("/{full_path:path}")
+    def spa(full_path: str):
+        # /api/* сюда не попадают (роуты выше уже их обслужили); но если кто-то
+        # дёрнул несуществующий /api — отдаём 404, а не HTML.
+        if full_path.startswith("api/"):
+            raise HTTPException(404, "Not found")
+        candidate = (WEB_DIST / full_path).resolve()
+        if full_path and str(candidate).startswith(str(WEB_DIST.resolve())) and candidate.is_file():
+            return FileResponse(str(candidate))
+        return FileResponse(str(WEB_DIST / "index.html"))
+else:
+    @app.get("/")
+    def need_build():
+        return {
+            "status": "frontend не собран",
+            "hint": "cd frontend && npm install && npm run build",
+        }

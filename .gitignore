@@ -14,5 +14,9 @@ memory.json
 memory_chat_*.json
 workspace/
 
+# Frontend (React+Vite)
+frontend/node_modules/
+frontend/.vite/
+
 # OS
 .DS_Store

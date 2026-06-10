@@ -67,7 +67,9 @@ def discover_agents():
     return [d.name for d in sorted(AGENTS_DIR.iterdir()) if d.is_dir()]
 
 
-def load_agent(name):
+def load_agent(name, workspace_base=None):
+    """workspace_base — корень рабочих файлов. Для прогона в контексте
+    компании сюда передаётся её папка, чтобы агент читал/писал внутри неё."""
     folder = AGENTS_DIR / name
     if not folder.is_dir():
         raise FileNotFoundError(f"Нет агента с папкой: agents/{name}")
@@ -95,7 +97,7 @@ def load_agent(name):
     roots = [("self", folder / "knowledge")]
     for ref in knowledge_refs:
         roots.append((ref, KNOWLEDGE_DIR / ref))
-    tools = make_workspace_tools() + make_knowledge_tools(roots)
+    tools = make_workspace_tools(workspace_base) + make_knowledge_tools(roots)
 
     # web: из манифеста или legacy tools.txt
     cfg = folder / "tools.txt"

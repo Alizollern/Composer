@@ -12,11 +12,13 @@ MEMORY_FILE = ROOT / "memory.json"
 
 RUNS_DIR = WORKSPACE / ".runs"                   # история прогонов (персист для API)
 KV_FILE = WORKSPACE / ".kv.json"                 # key-value стор интеграции
+COMPANIES_DIR = WORKSPACE / "companies"          # папка на каждую компанию (мульти-тенант)
 
 WORKSPACE.mkdir(exist_ok=True)
 AGENTS_DIR.mkdir(exist_ok=True)
 KNOWLEDGE_DIR.mkdir(exist_ok=True)
 RUNS_DIR.mkdir(exist_ok=True)
+COMPANIES_DIR.mkdir(exist_ok=True)
 
 # Модель и лимиты (можно переопределить переменными окружения)
 MODEL = os.environ.get("COMPOSER_MODEL", "claude-sonnet-4-5")

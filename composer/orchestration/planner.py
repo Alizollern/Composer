@@ -17,6 +17,7 @@ from composer.agents.loader import discover_agents, load_agent
 from composer.orchestration.agent_tools import make_agent_tools
 from composer.tools.registry import make_workspace_tools
 from composer.orchestration.runner import run_agent_by_name
+from composer import companies
 
 SYNTH_SYSTEM = (
     "Ты — оркестратор платформы Composer AI. Тебе дана цель пользователя.\n"
@@ -33,40 +34,45 @@ def _emit(on_event, **event):
         on_event(event)
 
 
-def _snapshot_files():
-    return {str(f.relative_to(WORKSPACE)): None
-            for f in WORKSPACE.rglob("*")
+def _snapshot_files(base):
+    return {str(f.relative_to(base)): None
+            for f in base.rglob("*")
             if f.is_file() and ".runs" not in f.parts and not f.name.startswith(".")}
 
 
-def orchestrate_dynamic(goal, orchestrator=None, on_event=None, llm=None):
+def orchestrate_dynamic(goal, orchestrator=None, on_event=None, llm=None, company=None):
     orchestrator = orchestrator or ORCHESTRATOR_AGENT
     llm = llm or ClaudeProvider()
     names = discover_agents()
 
-    before = set(_snapshot_files())
+    base = companies.company_dir(company) if company else WORKSPACE
+    base.mkdir(parents=True, exist_ok=True)
+    before = set(_snapshot_files(base))
 
     if orchestrator in names:
         _emit(on_event, type="start", mode="dynamic",
-              orchestrator=orchestrator, goal=goal,
+              orchestrator=orchestrator, goal=goal, company=company,
               workers=load_agent(orchestrator).get("subagents") or [])
-        res = run_agent_by_name(orchestrator, goal, llm=llm, on_event=on_event)
+        res = run_agent_by_name(orchestrator, goal, llm=llm,
+                                on_event=on_event, company=company)
         final = res["final"]
     else:
         # синтезируем оркестратора над всеми агентами
         workers = [n for n in names if n != orchestrator]
         _emit(on_event, type="start", mode="dynamic",
-              orchestrator="(synthesized)", goal=goal, workers=workers)
-        tools = make_workspace_tools() + make_agent_tools(workers, llm, on_event)
-        final = run_agent(goal, llm, tools, InMemoryMemory(),
+              orchestrator="(synthesized)", goal=goal, company=company, workers=workers)
+        tools = (make_workspace_tools(base)
+                 + make_agent_tools(workers, llm, on_event, workspace_base=base))
+        full_goal = companies.profile_context(company) + goal if company else goal
+        final = run_agent(full_goal, llm, tools, InMemoryMemory(),
                           system=SYNTH_SYSTEM, on_event=on_event,
                           parallel_tools=True)
 
     # какие файлы появились в ходе прогона
-    after = set(_snapshot_files())
+    after = set(_snapshot_files(base))
     produced = {}
     for name in sorted(after):
-        p = WORKSPACE / name
+        p = base / name
         try:
             produced[name] = p.read_text()
         except Exception:
@@ -76,6 +82,7 @@ def orchestrate_dynamic(goal, orchestrator=None, on_event=None, llm=None):
     return {
         "goal": goal,
         "mode": "dynamic",
+        "company": company,
         "orchestrator": orchestrator if orchestrator in names else "(synthesized)",
         "final": final,
         "files": produced,

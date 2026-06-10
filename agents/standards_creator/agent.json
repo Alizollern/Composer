@@ -3,5 +3,5 @@
   "web": true,
   "output": "standards.md",
   "knowledge_refs": ["Starbucks"],
-  "max_steps": 14
+  "max_steps": 10
 }

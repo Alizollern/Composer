@@ -29,19 +29,26 @@ def _safe(base, name):
 
 
 # ---------- Общая доска (workspace) ----------
-def make_workspace_tools():
+def make_workspace_tools(base=None):
+    """base — корень рабочей папки. Для прогона в контексте компании сюда
+    передаётся её папка (workspace/companies/<slug>/), и все чтения/записи
+    скоупятся в неё. По умолчанию — общий WORKSPACE."""
+    base = Path(base) if base else WORKSPACE
+    base.mkdir(parents=True, exist_ok=True)
+
     def write_file(path, content):
-        p = _safe(WORKSPACE, path)
+        p = _safe(base, path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content)
         return f"Записано {len(content)} символов в {path}"
 
     def read_file(path):
-        p = _safe(WORKSPACE, path)
+        p = _safe(base, path)
         return p.read_text() if p.exists() else f"Файл {path} не найден"
 
     def list_files(_=None):
-        fs = [str(f.relative_to(WORKSPACE)) for f in WORKSPACE.rglob("*") if f.is_file()]
+        fs = [str(f.relative_to(base)) for f in base.rglob("*")
+              if f.is_file() and not f.name.startswith(".")]
         return "\n".join(fs) if fs else "Рабочая папка пуста"
 
     return [
