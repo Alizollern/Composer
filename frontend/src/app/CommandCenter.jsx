@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Sparkles, Check, Loader2, FileText, ArrowRight, CircleDot } from "lucide-react";
 import { api } from "../lib/api.js";
 import { renderMd } from "../lib/md.js";
 import { roleLabel, toolLabel, toolDetail } from "../lib/labels.js";
@@ -30,24 +31,24 @@ export default function CommandCenter({ company, companyName, onProduced, onOpen
 
   function handleEvent(d) {
     switch (d.type) {
-      case "start": pushStep({ ico: "✦", label: "Анализирую задачу и распределяю работу" }); break;
+      case "start": pushStep({ kind: "spark", label: "Анализирую задачу и распределяю работу" }); break;
       case "subagent_start": {
         const key = d.agent + ":" + (d.depth || 0);
         if (seenRef.current.has(key)) break;
         seenRef.current.add(key);
-        pushStep({ ico: "▶", label: roleLabel(d.agent), detail: d.task || "" });
+        pushStep({ kind: "run", label: roleLabel(d.agent), detail: d.task || "" });
         break;
       }
-      case "subagent_done": pushStep({ ico: "✓", cls: "done", label: roleLabel(d.agent) + " — готово" }); break;
+      case "subagent_done": pushStep({ kind: "done", label: roleLabel(d.agent) + " — готово" }); break;
       case "tool_call":
         if (d.name && d.name.startsWith("delegate_to_")) break;
-        pushStep({ ico: "•", cls: "tool", label: toolLabel(d.name), detail: toolDetail(d.input) });
+        pushStep({ kind: "tool", label: toolLabel(d.name), detail: toolDetail(d.input) });
         break;
       case "text":
         if (d.text && d.text.trim().length > 12 && d.text.trim().length < 600)
-          pushStep({ ico: "›", cls: "note", note: true, label: d.text.trim() });
+          pushStep({ kind: "note", label: d.text.trim() });
         break;
-      case "done": pushStep({ ico: "✓", cls: "done", label: "Работа завершена" }); setPhase("готово"); break;
+      case "done": pushStep({ kind: "done", label: "Работа завершена" }); setPhase("готово"); break;
       default: break;
     }
   }
@@ -77,10 +78,10 @@ export default function CommandCenter({ company, companyName, onProduced, onOpen
       const r = await api.run(g, company || null);
       runId = r.run_id;
     } catch (e) {
-      pushStep({ ico: "!", label: "Не удалось запустить", detail: String(e) });
+      pushStep({ kind: "err", label: "Не удалось запустить", detail: String(e) });
       setRunning(false); setPhase("ошибка"); return;
     }
-    pushStep({ ico: "◆", label: "Двойник принял задачу" });
+    pushStep({ kind: "accept", label: "Двойник принял задачу" });
 
     const src = new EventSource(api.streamUrl(runId));
     srcRef.current = src;
@@ -97,63 +98,130 @@ export default function CommandCenter({ company, companyName, onProduced, onOpen
 
   return (
     <div>
-      <div className="app-head">
+      {/* Заголовок */}
+      <div className="mb-7">
         <div className="eyebrow">Командный центр{companyName ? ` · ${companyName}` : ""}</div>
-        <h1 className="serif">{greet}. Чем займёмся?</h1>
-        <p>Опишите задачу обычными словами — двойник возьмёт её на себя{companyName ? ` для «${companyName}»` : ""}.</p>
+        <h1 className="mt-2 text-3xl sm:text-4xl font-semibold text-ink">{greet}. Чем займёмся?</h1>
+        <p className="mt-2 text-ink-soft">
+          Опишите задачу обычными словами — двойник возьмёт её на себя{companyName ? ` для «${companyName}»` : ""}.
+        </p>
       </div>
 
-      <div className="taskbox">
-        <textarea rows={3} value={goal} onChange={(e) => setGoal(e.target.value)}
+      {/* Поле задачи */}
+      <div className="rounded-3xl border border-line bg-white p-4 shadow-soft focus-within:border-emerald/40 focus-within:ring-4 focus-within:ring-emerald/10 transition-all">
+        <textarea
+          rows={3}
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
           onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run(); }}
-          placeholder="Например: подготовь стандарты сервиса и адаптируй под нашу сеть" />
-        <div className="taskbox-bar">
-          <div className="chips">
-            {SUGGESTIONS.map((s) => <button key={s} className="chip" onClick={() => setGoal(s)}>{s}</button>)}
+          placeholder="Например: подготовь стандарты сервиса и адаптируй под нашу сеть"
+          className="w-full resize-none bg-transparent px-2 py-1 text-[16px] leading-relaxed text-ink outline-none placeholder:text-ink-muted/70"
+        />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+          <div className="flex flex-wrap gap-2">
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setGoal(s)}
+                className="rounded-full border border-line px-3 py-1.5 text-[12.5px] text-ink-soft transition-colors hover:border-emerald/40 hover:bg-emerald/5 hover:text-emerald-600"
+              >
+                {s}
+              </button>
+            ))}
           </div>
-          <button className="btn btn-primary" disabled={running} onClick={run}>
-            {running ? "Двойник работает…" : "Поручить двойнику →"}
+          <button className="btn btn-primary btn-sm whitespace-nowrap" disabled={running} onClick={run}>
+            {running ? <><Loader2 size={16} className="animate-spin" /> Двойник работает…</> : <>Поручить двойнику <ArrowRight size={16} /></>}
           </button>
         </div>
       </div>
 
+      {/* Сессия */}
       {started && (
-        <div className="session">
-          <div className="session-grid">
-            <div className="panel">
-              <div className="panel-head">
-                <span className="panel-title">Двойник за работой</span>
-                <span className={"phase-badge" + (running ? "" : " done")}>{phase}</span>
-              </div>
-              <div className="timeline">
-                {steps.map((s, i) => (
-                  <div className="tl-item" key={i}>
-                    <div className={"tl-ico " + (s.cls || "")}>{s.ico}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {s.note ? <div className="tl-note">{s.label}</div>
-                        : <><div className="tl-label">{s.label}</div>{s.detail && <div className="tl-detail">{s.detail}</div>}</>}
-                    </div>
+        <div className="mt-7 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+          {/* Лента работы */}
+          <div className="rounded-3xl border border-line bg-white p-5 shadow-soft">
+            <div className="mb-4 flex items-center justify-between">
+              <span className="text-sm font-semibold text-ink">Двойник за работой</span>
+              <span
+                className={
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium " +
+                  (running ? "bg-emerald/10 text-emerald-600" : phase === "ошибка" ? "bg-red-50 text-red-500" : "bg-paper-deep text-ink-muted")
+                }
+              >
+                {phase}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {steps.map((s, i) => <StepRow key={i} s={s} />)}
+              {steps.length === 0 && <div className="text-sm text-ink-muted">Готовлюсь…</div>}
+            </div>
+          </div>
+
+          {/* Результат */}
+          <div className="flex flex-col rounded-3xl border border-line bg-white p-6 shadow-soft">
+            <span className="mb-4 text-sm font-semibold text-ink">Результат</span>
+            <div className="flex-1">
+              {result
+                ? <div className="md" dangerouslySetInnerHTML={{ __html: renderMd(result) }} />
+                : (
+                  <div className="flex h-full min-h-[140px] items-center justify-center rounded-2xl bg-paper/60 text-center text-sm text-ink-muted">
+                    {running ? (
+                      <span className="inline-flex items-center gap-2"><Loader2 size={15} className="animate-spin" /> Двойник работает над задачей…</span>
+                    ) : "Готовый материал появится здесь."}
                   </div>
+                )}
+            </div>
+            {docs.length > 0 && (
+              <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
+                {docs.map((f) => (
+                  <button
+                    key={f}
+                    onClick={onOpenDocs}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-emerald/10 px-3 py-1.5 text-[13px] font-medium text-emerald-600 transition-colors hover:bg-emerald/15"
+                  >
+                    <FileText size={13} /> {f}
+                  </button>
                 ))}
               </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-head"><span className="panel-title">Результат</span></div>
-              <div className="result-body">
-                {result
-                  ? <div className="md" dangerouslySetInnerHTML={{ __html: renderMd(result) }} />
-                  : <div className="placeholder">{running ? "Двойник работает над задачей…" : "Готовый материал появится здесь."}</div>}
-              </div>
-              {docs.length > 0 && (
-                <div className="docs-strip">
-                  {docs.map((f) => <button key={f} className="doc-pill" onClick={onOpenDocs}>{f}</button>)}
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* Одна строка ленты */
+function StepRow({ s }) {
+  if (s.kind === "note") {
+    return (
+      <div className="rounded-xl border-l-2 border-emerald/40 bg-paper/60 px-3 py-2 text-[13.5px] italic text-ink-soft">
+        {s.label}
+      </div>
+    );
+  }
+  const ICON = {
+    spark: <Sparkles size={13} />,
+    accept: <CircleDot size={13} />,
+    run: <Loader2 size={13} className="animate-spin" />,
+    tool: <span className="h-1.5 w-1.5 rounded-full bg-current" />,
+    done: <Check size={13} />,
+    err: <span className="font-bold">!</span>,
+  }[s.kind] || <span className="h-1.5 w-1.5 rounded-full bg-current" />;
+
+  const tone =
+    s.kind === "done" ? "bg-emerald text-white"
+    : s.kind === "err" ? "bg-red-100 text-red-500"
+    : s.kind === "tool" ? "bg-paper-deep text-ink-muted"
+    : "bg-emerald/12 text-emerald-600";
+
+  return (
+    <div className="flex items-start gap-3">
+      <span className={"mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full " + tone}>{ICON}</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] text-ink">{s.label}</div>
+        {s.detail && <div className="truncate text-[12.5px] text-ink-muted">{s.detail}</div>}
+      </div>
     </div>
   );
 }

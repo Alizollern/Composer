@@ -11,7 +11,7 @@ orchestrate() отдаёт структурированный результат
 """
 
 from composer.config import WORKSPACE, PIPELINE_FILE, MEMORY_FILE
-from composer.engine.providers import ClaudeProvider
+from composer.engine.providers import get_provider
 from composer.engine.memory import JSONMemory
 from composer.engine.loop import run_agent
 from composer.agents.loader import load_agent, discover_agents
@@ -35,7 +35,7 @@ def _emit(on_event, **event):
 
 
 def orchestrate(goal, on_event=None, llm=None):
-    llm = llm or ClaudeProvider()
+    llm = llm or get_provider()
     memory = JSONMemory(MEMORY_FILE)
     pipeline = load_pipeline()
 

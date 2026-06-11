@@ -10,7 +10,7 @@
 """
 
 from composer.config import WORKSPACE, ORCHESTRATOR_AGENT
-from composer.engine.providers import ClaudeProvider
+from composer.engine.providers import get_provider
 from composer.engine.memory import InMemoryMemory
 from composer.engine.loop import run_agent
 from composer.agents.loader import discover_agents, load_agent
@@ -42,34 +42,45 @@ def _snapshot_files(base):
 
 def orchestrate_dynamic(goal, orchestrator=None, on_event=None, llm=None, company=None):
     orchestrator = orchestrator or ORCHESTRATOR_AGENT
-    llm = llm or ClaudeProvider()
+    llm = llm or get_provider()
     names = discover_agents()
 
     base = companies.company_dir(company) if company else WORKSPACE
     base.mkdir(parents=True, exist_ok=True)
     before = set(_snapshot_files(base))
 
-    if orchestrator in names:
-        _emit(on_event, type="start", mode="dynamic",
-              orchestrator=orchestrator, goal=goal, company=company,
-              workers=load_agent(orchestrator).get("subagents") or [])
-        res = run_agent_by_name(orchestrator, goal, llm=llm,
-                                on_event=on_event, company=company)
-        final = res["final"]
-    else:
-        # синтезируем оркестратора над всеми агентами
-        workers = [n for n in names if n != orchestrator]
-        _emit(on_event, type="start", mode="dynamic",
-              orchestrator="(synthesized)", goal=goal, company=company, workers=workers)
-        tools = (make_workspace_tools(base)
-                 + make_agent_tools(workers, llm, on_event, workspace_base=base))
-        full_goal = companies.profile_context(company) + goal if company else goal
-        final = run_agent(full_goal, llm, tools, InMemoryMemory(),
-                          system=SYNTH_SYSTEM, on_event=on_event,
-                          parallel_tools=True)
+    # Синтез итога оборачиваем: если финальный сбор упадёт (например, контекст
+    # распух -> API 400), но суб-агенты уже сохранили документ — отдаём документ,
+    # а не голую ошибку. Деньги уже потрачены — пусть хотя бы результат дойдёт.
+    final = None
+    err = None
+    try:
+        if orchestrator in names:
+            _emit(on_event, type="start", mode="dynamic",
+                  orchestrator=orchestrator, goal=goal, company=company,
+                  workers=load_agent(orchestrator).get("subagents") or [])
+            res = run_agent_by_name(orchestrator, goal, llm=llm,
+                                    on_event=on_event, company=company)
+            final = res["final"]
+        else:
+            # синтезируем оркестратора над всеми агентами
+            workers = [n for n in names if n != orchestrator]
+            _emit(on_event, type="start", mode="dynamic",
+                  orchestrator="(synthesized)", goal=goal, company=company, workers=workers)
+            tools = (make_workspace_tools(base)
+                     + make_agent_tools(workers, llm, on_event, workspace_base=base))
+            full_goal = companies.profile_context(company) + goal if company else goal
+            final = run_agent(full_goal, llm, tools, InMemoryMemory(),
+                              system=SYNTH_SYSTEM, on_event=on_event,
+                              parallel_tools=True)
+    except Exception as e:
+        err = e
+        _emit(on_event, type="text",
+              text="Финальная сборка прервалась, но подготовленные материалы сохранены.")
 
     # какие файлы появились в ходе прогона
     after = set(_snapshot_files(base))
+    new_files = sorted(after - before)
     produced = {}
     for name in sorted(after):
         p = base / name
@@ -77,6 +88,17 @@ def orchestrate_dynamic(goal, orchestrator=None, on_event=None, llm=None, compan
             produced[name] = p.read_text()
         except Exception:
             produced[name] = "(бинарный файл)"
+
+    # Фолбэк: итога нет, но документ создан — отдаём его как итог.
+    if not (final and final.strip()):
+        docs = [n for n in new_files if n.endswith(".md")] or \
+               [n for n in produced if n.endswith(".md") and n != "profile.md"]
+        if docs:
+            pick = docs[-1]
+            final = produced.get(pick, "")
+        elif err is not None:
+            # совсем нечего показать — это настоящая ошибка
+            raise err
 
     _emit(on_event, type="done")
     return {
@@ -86,5 +108,5 @@ def orchestrate_dynamic(goal, orchestrator=None, on_event=None, llm=None, compan
         "orchestrator": orchestrator if orchestrator in names else "(synthesized)",
         "final": final,
         "files": produced,
-        "new_files": sorted(after - before),
+        "new_files": new_files,
     }

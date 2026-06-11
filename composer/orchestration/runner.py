@@ -14,7 +14,7 @@ import re
 import time
 
 from composer.config import WORKSPACE
-from composer.engine.providers import ClaudeProvider
+from composer.engine.providers import get_provider
 from composer.engine.memory import InMemoryMemory
 from composer.engine.loop import run_agent
 from composer.agents.loader import load_agent
@@ -47,7 +47,7 @@ def run_agent_by_name(name, task, llm=None, on_event=None,
     base.mkdir(parents=True, exist_ok=True)
 
     agent = load_agent(name, workspace_base=base)
-    llm = llm or ClaudeProvider(model=agent.get("model"))
+    llm = llm or get_provider(model=agent.get("model"))
 
     # подмешиваем профиль компании в задачу
     full_task = companies.profile_context(company) + task if company else task

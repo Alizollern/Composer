@@ -180,7 +180,7 @@ def make_knowledge_tools(roots):
 _SEARCH_BACKENDS = ["google", "bing", "brave", "yahoo", "duckduckgo"]
 
 
-def _web_search(query, n=5):
+def _web_search(query, n=4):
     from ddgs import DDGS
     last_err = None
     for backend in _SEARCH_BACKENDS:
@@ -190,13 +190,14 @@ def _web_search(query, n=5):
             last_err = e
             continue
         if results:
+            # тело каждого результата режем — в контекст не должны попадать «простыни»
             return "\n\n".join(
-                f"{i}. {r.get('title','')}\n   URL: {r.get('href','')}\n   {r.get('body','')}"
+                f"{i}. {r.get('title','')}\n   URL: {r.get('href','')}\n   {(r.get('body','') or '')[:300]}"
                 for i, r in enumerate(results, 1))
     return f"Поиск не дал результатов (последняя ошибка: {last_err})."
 
 
-def _fetch_url(url, max_chars=2500):
+def _fetch_url(url, max_chars=1600):
     req = urllib.request.Request(url, headers=_UA)
     raw = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "ignore")
     raw = re.sub(r"(?is)<(script|style|nav|footer|header).*?</\1>", " ", raw)

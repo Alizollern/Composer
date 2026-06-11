@@ -43,7 +43,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from composer.config import WORKSPACE, ROOT
-from composer.engine.providers import ClaudeProvider
+from composer.engine.providers import get_provider
 from composer.engine.memory import JSONMemory
 from composer.engine.loop import run_agent
 from composer.engine.runs import create_run, get_run, list_runs, RUNS
@@ -286,7 +286,7 @@ def chat(req: ChatRequest):
     agent = load_agent(req.agent)
     memory = JSONMemory(WORKSPACE.parent / f"memory_chat_{req.agent}.json")
     events = []
-    reply = run_agent(req.message, ClaudeProvider(model=agent.get("model")),
+    reply = run_agent(req.message, get_provider(model=agent.get("model")),
                       agent["tools"], memory, system=agent["system"],
                       history=history, on_event=lambda e: events.append(e))
     return {"session_id": session_id, "reply": reply, "events": events}

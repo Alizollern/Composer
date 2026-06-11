@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { Star, FileText, Pencil, Save, X } from "lucide-react";
 import { api } from "../lib/api.js";
 import { renderMd } from "../lib/md.js";
 
@@ -33,55 +34,99 @@ export default function Docs({ company, companyName }) {
 
   if (!company) return (
     <div>
-      <div className="app-head"><div className="eyebrow">Документы</div><h1 className="serif">Материалы двойника</h1></div>
-      <div className="empty-note">Сначала создайте компанию слева, чтобы у двойника была папка для документов.</div>
+      <div className="eyebrow">Документы</div>
+      <h1 className="mt-2 text-3xl sm:text-4xl font-semibold text-ink">Материалы двойника</h1>
+      <div className="mt-6 rounded-3xl border border-dashed border-line bg-white/60 p-10 text-center text-ink-muted">
+        Сначала создайте компанию слева, чтобы у двойника была папка для документов.
+      </div>
     </div>
   );
 
+  const files = (data?.files || []).filter((f) => f.name !== "profile.md");
+
   return (
     <div>
-      <div className="app-head">
+      <div className="mb-6">
         <div className="eyebrow">Документы{companyName ? ` · ${companyName}` : ""}</div>
-        <h1 className="serif">Материалы двойника</h1>
-        <p>Профиль компании и всё, что двойник для неё подготовил.</p>
+        <h1 className="mt-2 text-3xl sm:text-4xl font-semibold text-ink">Материалы двойника</h1>
+        <p className="mt-2 text-ink-soft">Профиль компании и всё, что двойник для неё подготовил.</p>
       </div>
 
-      <div className="docs-layout">
-        <div className="docs-list">
-          <div className={"file-card" + (selected === "__profile__" ? " active" : "")} onClick={openProfile}>
-            <div className="file-name">★ Профиль компании</div>
-            <div className="file-meta">контекст для двойника</div>
-          </div>
-          {(data?.files || []).filter((f) => f.name !== "profile.md").map((f) => (
-            <div key={f.name} className={"file-card" + (selected === f.name ? " active" : "")} onClick={() => openFile(f.name)}>
-              <div className="file-name">{f.name}</div>
-              <div className="file-meta">{Math.max(1, Math.round(f.size / 1024))} КБ</div>
-            </div>
+      <div className="grid gap-5 md:grid-cols-[260px_1fr]">
+        {/* Список */}
+        <div className="space-y-2">
+          <button
+            onClick={openProfile}
+            className={
+              "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all " +
+              (selected === "__profile__" ? "border-emerald/40 bg-emerald/5" : "border-line bg-white hover:border-emerald/30")
+            }
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald/10 text-emerald-600"><Star size={16} /></span>
+            <span>
+              <span className="block text-[14.5px] font-medium text-ink">Профиль компании</span>
+              <span className="block text-[12px] text-ink-muted">контекст для двойника</span>
+            </span>
+          </button>
+
+          {files.map((f) => (
+            <button
+              key={f.name}
+              onClick={() => openFile(f.name)}
+              className={
+                "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all " +
+                (selected === f.name ? "border-emerald/40 bg-emerald/5" : "border-line bg-white hover:border-emerald/30")
+              }
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-paper-deep text-ink-soft"><FileText size={16} /></span>
+              <span className="min-w-0">
+                <span className="block truncate text-[14.5px] font-medium text-ink">{f.name}</span>
+                <span className="block text-[12px] text-ink-muted">{Math.max(1, Math.round(f.size / 1024))} КБ</span>
+              </span>
+            </button>
           ))}
-          {(!data?.files || data.files.filter((f) => f.name !== "profile.md").length === 0) && (
-            <div className="empty-note" style={{ padding: "24px 12px", fontSize: 13 }}>Документов пока нет.<br />Поручите двойнику задачу.</div>
+
+          {files.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-line px-4 py-6 text-center text-[13px] text-ink-muted">
+              Документов пока нет.<br />Поручите двойнику задачу.
+            </div>
           )}
         </div>
 
-        <div className="docs-view">
+        {/* Просмотр */}
+        <div className="min-h-[300px] rounded-3xl border border-line bg-white p-7 shadow-soft">
           {selected === "__profile__" ? (
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <h2 className="serif" style={{ fontSize: 22 }}>Профиль компании</h2>
-                {profileEdit
-                  ? <span><button className="btn btn-ghost btn-sm" onClick={() => { setProfileEdit(false); setProfileDraft(data.profile || ""); }}>Отмена</button>
-                          <button className="btn btn-primary btn-sm" style={{ marginLeft: 8 }} onClick={saveProfile}>Сохранить</button></span>
-                  : <button className="btn btn-ghost btn-sm" onClick={() => setProfileEdit(true)}>Редактировать</button>}
+              <div className="mb-5 flex items-center justify-between">
+                <h2 className="font-serif text-2xl font-semibold text-ink">Профиль компании</h2>
+                {profileEdit ? (
+                  <div className="flex gap-2">
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setProfileEdit(false); setProfileDraft(data.profile || ""); }}>
+                      <X size={15} /> Отмена
+                    </button>
+                    <button className="btn btn-primary btn-sm" onClick={saveProfile}><Save size={15} /> Сохранить</button>
+                  </div>
+                ) : (
+                  <button className="btn btn-ghost btn-sm" onClick={() => setProfileEdit(true)}><Pencil size={15} /> Редактировать</button>
+                )}
               </div>
-              {profileEdit
-                ? <textarea value={profileDraft} onChange={(e) => setProfileDraft(e.target.value)} rows={18}
-                    style={{ width: "100%", border: "1px solid var(--line)", borderRadius: 11, padding: 14, fontFamily: "inherit", fontSize: 14.5, outline: "none" }} />
-                : <div className="md" dangerouslySetInnerHTML={{ __html: renderMd(data?.profile || "_Профиль пуст._") }} />}
+              {profileEdit ? (
+                <textarea
+                  value={profileDraft}
+                  onChange={(e) => setProfileDraft(e.target.value)}
+                  rows={18}
+                  className="w-full rounded-2xl border border-line bg-paper p-4 text-[15px] leading-relaxed text-ink outline-none focus:border-emerald focus:ring-4 focus:ring-emerald/10"
+                />
+              ) : (
+                <div className="md" dangerouslySetInnerHTML={{ __html: renderMd(data?.profile || "_Профиль пуст._") }} />
+              )}
             </div>
           ) : selected ? (
             <div className="md" dangerouslySetInnerHTML={{ __html: renderMd(content) }} />
           ) : (
-            <div className="placeholder">Выберите документ слева, чтобы открыть.</div>
+            <div className="flex h-full min-h-[240px] items-center justify-center text-center text-sm text-ink-muted">
+              Выберите документ слева, чтобы открыть.
+            </div>
           )}
         </div>
       </div>
