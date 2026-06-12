@@ -4,77 +4,53 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        serif: ['Fraunces', 'Georgia', 'serif'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       colors: {
-        // Глубокий лес — фон тёмных секций / приложения
-        forest: {
-          DEFAULT: '#0a2a1e',
-          900: '#062016',
-          800: '#0a2a1e',
-          700: '#0e3a2b',
-          600: '#134d39',
+        brand: {
+          50: '#f5f3ff',
+          100: '#ede9fe',
+          400: '#a78bfa',
+          500: '#8b5cf6',
+          600: '#7c3aed', // Purple/Violet accent for that "intellectual" Reflect look
+          900: '#4c1d95',
         },
-        // Изумруд — бренд / акцент
-        emerald: {
-          DEFAULT: '#15a06b',
-          400: '#2bc486',
-          500: '#15a06b',
-          600: '#0f8a5b',
-        },
-        // Тёплая бумага — светлая база
-        paper: {
-          DEFAULT: '#faf8f2',
-          card: '#ffffff',
-          deep: '#f1eee4',
-        },
-        ink: {
-          DEFAULT: '#13211b',
-          soft: '#3d4f47',
-          muted: '#6b7d73',
-        },
-        line: '#e7e2d6',
-      },
-      maxWidth: {
-        container: '1180px',
-      },
-      borderRadius: {
-        xl2: '1.25rem',
-        '4xl': '2rem',
+        slate: {
+          50: '#fafafa',
+          100: '#f4f4f5',
+          200: '#e4e4e7',
+          800: '#27272a',
+          900: '#18181b', // Ink black
+        }
       },
       boxShadow: {
-        soft: '0 1px 2px rgba(16,40,30,.04), 0 8px 30px -12px rgba(16,40,30,.12)',
-        lift: '0 4px 12px rgba(16,40,30,.06), 0 24px 60px -20px rgba(16,40,30,.22)',
-        glow: '0 0 0 1px rgba(21,160,107,.18), 0 20px 50px -16px rgba(21,160,107,.35)',
-      },
-      letterSpacing: {
-        tightest: '-0.04em',
-      },
-      keyframes: {
-        'fade-up': {
-          '0%': { opacity: '0', transform: 'translateY(14px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        float: {
-          '0%,100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-8px)' },
-        },
-        shimmer: {
-          '0%': { backgroundPosition: '-200% 0' },
-          '100%': { backgroundPosition: '200% 0' },
-        },
-        'pulse-soft': {
-          '0%,100%': { opacity: '1' },
-          '50%': { opacity: '.45' },
-        },
+        sm: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        DEFAULT: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
+        md: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+        lg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+        glow: '0 0 20px rgba(124, 58, 237, 0.3)',
       },
       animation: {
-        'fade-up': 'fade-up .6s cubic-bezier(.21,.6,.35,1) both',
-        float: 'float 6s ease-in-out infinite',
-        shimmer: 'shimmer 2.2s linear infinite',
-        'pulse-soft': 'pulse-soft 1.6s ease-in-out infinite',
+        'blob': 'blob 7s infinite',
+        'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
+        'shimmer': 'shimmer 20s linear infinite',
       },
+      keyframes: {
+        blob: {
+          '0%': { transform: 'translate(0px, 0px) scale(1)' },
+          '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+          '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+          '100%': { transform: 'translate(0px, 0px) scale(1)' },
+        },
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        shimmer: {
+          from: { transform: 'translateX(0)' },
+          to: { transform: 'translateX(-50%)' },
+        }
+      }
     },
   },
   plugins: [],

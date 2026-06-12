@@ -1,94 +1,149 @@
-import { useEffect, useRef, useState } from "react";
-import { Send, Loader2 } from "lucide-react";
-import { api } from "../lib/api.js";
-import { renderMd } from "../lib/md.js";
+import React, { useState, useRef, useEffect } from "react";
+import { Send, Bot, User, FileText, ChevronRight } from "lucide-react";
+import { api } from "../lib/api";
 
 export default function Chat() {
-  const [agent, setAgent] = useState(null);
-  const [session, setSession] = useState(null);
-  const [msgs, setMsgs] = useState([]);
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const logRef = useRef(null);
+  const [messages, setMessages] = useState([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: "Здравствуйте! Я ассистент Evergreen. Отвечаю на вопросы строго по стандартам и регламентам вашей компании. Чем могу помочь?",
+    }
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    api.agents().then((list) => {
-      const names = list.map((a) => a.name);
-      const pref = ["advisor", "writer", "analyst", "orchestrator"];
-      setAgent(pref.find((p) => names.includes(p)) || names[0] || "advisor");
-    }).catch(() => setAgent("advisor"));
-  }, []);
+    scrollToBottom();
+  }, [messages, loading]);
 
-  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [msgs, busy]);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || loading) return;
 
-  async function send() {
-    const m = text.trim();
-    if (!m || busy) return;
-    setText("");
-    setMsgs((p) => [...p, { role: "user", text: m }]);
-    setBusy(true);
+    const userMessage = { id: Date.now().toString(), role: "user", content: input };
+    setMessages(prev => [...prev, userMessage]);
+    setInput("");
+    setLoading(true);
+
     try {
-      const res = await api.chat(agent, m, session);
-      setSession(res.session_id);
-      setMsgs((p) => [...p, { role: "twin", text: res.reply || "…" }]);
-    } catch {
-      setMsgs((p) => [...p, { role: "twin", text: "Связь прервалась. Попробуйте ещё раз." }]);
-    } finally { setBusy(false); }
-  }
+      const res = await api.chat.ask(userMessage.content);
+      
+      const assistantMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: res.refused
+          ? "Не нашёл ответа на этот вопрос в текущих документах. Я зафиксировал этот пробел — руководство его увидит."
+          : res.answer,
+        sources: res.sources,
+        refused: res.refused,
+      };
+      
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (e) {
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Ошибка сети. Попробуйте ещё раз.",
+        isError: true
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-6">
-        <div className="eyebrow">Диалог</div>
-        <h1 className="mt-2 text-3xl sm:text-4xl font-semibold text-ink">Поговорите с двойником</h1>
-        <p className="mt-2 text-ink-soft">Быстрые вопросы, идеи, советы. Двойник держит контекст беседы.</p>
+    <div className="flex flex-col h-full max-w-4xl mx-auto bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+      
+      <div className="px-6 py-4 border-b border-slate-200 bg-white">
+        <h2 className="text-lg font-bold text-slate-900">Ассистент компании</h2>
+        <p className="text-sm text-slate-500">Отвечает строго на основе загруженных документов.</p>
       </div>
 
-      <div className="flex h-[62vh] flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-soft">
-        <div ref={logRef} className="flex-1 space-y-4 overflow-y-auto p-5">
-          {msgs.length === 0 && (
-            <div className="flex h-full items-center justify-center px-6 text-center text-sm text-ink-muted">
-              Задайте первый вопрос — например, «как поднять средний чек на точке?»
-            </div>
-          )}
-          {msgs.map((m, i) => (
-            <div key={i} className={"flex " + (m.role === "user" ? "justify-end" : "justify-start")}>
-              <div
-                className={
-                  "max-w-[82%] rounded-2xl px-4 py-2.5 text-[15px] " +
-                  (m.role === "user"
-                    ? "bg-emerald text-white rounded-br-md"
-                    : "bg-paper border border-line text-ink rounded-bl-md")
-                }
-              >
-                {m.role === "twin"
-                  ? <div className="md" dangerouslySetInnerHTML={{ __html: renderMd(m.text) }} />
-                  : m.text}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div className={`flex max-w-[80%] ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+              <div className={`flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center mt-1
+                ${msg.role === "user" ? "bg-slate-800 ml-3 text-white" : "bg-brand-100 mr-3 text-brand-600"}
+              `}>
+                {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
               </div>
-            </div>
-          ))}
-          {busy && (
-            <div className="flex justify-start">
-              <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-line bg-paper px-4 py-2.5 text-sm text-ink-muted">
-                <Loader2 size={14} className="animate-spin" /> Двойник думает…
-              </div>
-            </div>
-          )}
-        </div>
+              
+              <div className="flex flex-col">
+                <div className={`p-4 rounded-lg shadow-sm ${
+                  msg.role === "user" 
+                    ? "bg-white border border-slate-200 text-slate-900" 
+                    : msg.isError 
+                      ? "bg-red-50 text-red-800 border border-red-200"
+                      : msg.refused
+                        ? "bg-amber-50 text-amber-800 border border-amber-200"
+                        : "bg-white border border-slate-200 text-slate-900"
+                }`}>
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</div>
+                </div>
 
-        <div className="flex items-end gap-2 border-t border-line p-3">
-          <textarea
-            rows={1}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="Сообщение двойнику…"
-            className="max-h-32 flex-1 resize-none rounded-2xl border border-line bg-paper px-4 py-3 text-[15px] text-ink outline-none transition-all placeholder:text-ink-muted/70 focus:border-emerald focus:ring-4 focus:ring-emerald/10"
+                {msg.sources && msg.sources.length > 0 && !msg.refused && (
+                  <div className="mt-2 space-y-1">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">Источники:</span>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {msg.sources.map((src, i) => (
+                        <div 
+                          key={i} 
+                          className="flex items-center text-xs bg-white border border-slate-200 text-slate-600 px-2 py-1 rounded hover:border-brand-300 hover:text-brand-600 transition-colors cursor-pointer"
+                        >
+                          <FileText size={12} className="mr-1.5" />
+                          <span className="truncate max-w-[150px]">{src.document_title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {loading && (
+          <div className="flex justify-start">
+            <div className="flex max-w-[80%] flex-row">
+              <div className="flex-shrink-0 w-8 h-8 rounded-md bg-brand-100 mr-3 text-brand-600 flex items-center justify-center mt-1">
+                <Bot size={16} />
+              </div>
+              <div className="p-4 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center space-x-2 h-12">
+                <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse"></div>
+                <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse delay-75"></div>
+                <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse delay-150"></div>
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <div className="p-4 bg-white border-t border-slate-200">
+        <form onSubmit={handleSubmit} className="flex items-center space-x-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Задайте вопрос..."
+            className="flex-1 px-4 py-2 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
+            disabled={loading}
           />
-          <button className="btn btn-primary grid h-11 w-11 place-items-center !px-0" disabled={busy} onClick={send} aria-label="Отправить">
-            <Send size={17} />
+          <button
+            type="submit"
+            disabled={!input.trim() || loading}
+            className="btn btn-primary px-4 py-2 h-full"
+          >
+            <Send size={18} className="mr-2" /> Отправить
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );

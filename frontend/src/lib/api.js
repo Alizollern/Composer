@@ -1,50 +1,125 @@
-// Тонкий клиент к локальному API. Тот же origin (в dev — прокси Vite).
+// Тонкий клиент к локальному API (Evergreen)
+// В dev-режиме проксируется Vite, в проде отдается тем же сервером, поэтому base = ""
 const base = "";
 
-async function j(path, opts) {
-  const r = await fetch(base + path, opts);
-  if (!r.ok) throw new Error((await r.text()) || r.statusText);
-  return r.json();
+// Ключ для хранения токена
+const TOKEN_KEY = "evergreen_token";
+
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+
+/**
+ * Базовый fetcher с подкидыванием токена и обработкой 401
+ */
+async function j(path, opts = {}) {
+  const headers = new Headers(opts.headers || {});
+  
+  const token = getToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  // Если это не FormData, ставим application/json
+  if (!(opts.body instanceof FormData) && !headers.has("Content-Type") && opts.body) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(base + path, { ...opts, headers });
+
+  if (response.status === 401) {
+    clearToken();
+    window.dispatchEvent(new Event("auth:unauthorized"));
+    throw new Error("Unauthorized");
+  }
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let errMsg = response.statusText;
+    try {
+      const errJson = JSON.parse(errText);
+      errMsg = errJson.detail || errJson.message || errMsg;
+    } catch (e) {
+      errMsg = errText || errMsg;
+    }
+    throw new Error(errMsg);
+  }
+
+  // Для эндпоинтов, возвращающих файл (download)
+  if (opts.responseType === "blob") {
+    return response.blob();
+  }
+
+  return response.json();
 }
 
 export const api = {
   health: () => j("/api/health"),
 
-  // компании
-  companies: () => j("/api/companies"),
-  createCompany: (name, profile) =>
-    j("/api/companies", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, profile }),
-    }),
-  company: (slug) => j(`/api/companies/${encodeURIComponent(slug)}`),
-  saveProfile: (slug, content) =>
-    j(`/api/companies/${encodeURIComponent(slug)}/profile`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
-    }),
-  companyFile: (slug, name) =>
-    j(`/api/companies/${encodeURIComponent(slug)}/files/${encodeURIComponent(name)}`),
+  // --- Auth ---
+  auth: {
+    registerCompany: (data) => j("/api/auth/register-company", { method: "POST", body: JSON.stringify(data) }),
+    login: (data) => j("/api/auth/login", { method: "POST", body: JSON.stringify(data) }),
+    me: () => j("/api/auth/me"),
+  },
 
-  // прогоны
-  run: (goal, company) =>
-    j("/api/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ goal, mode: "dynamic", company }),
-    }),
-  runStatus: (id) => j(`/api/run/${id}`),
-  runs: () => j("/api/runs"),
-  streamUrl: (id) => `${base}/api/run/${id}/stream`,
+  // --- Users ---
+  users: {
+    create: (data) => j("/api/users", { method: "POST", body: JSON.stringify(data) }),
+  },
 
-  // диалог
-  agents: () => j("/api/agents"),
-  chat: (agent, message, session_id) =>
-    j("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agent, message, session_id }),
-    }),
+  // --- Documents (Knowledge Base) ---
+  documents: {
+    list: (status_filter) => {
+      const qs = status_filter ? `?status_filter=${status_filter}` : "";
+      return j(`/api/documents${qs}`);
+    },
+    get: (id) => j(`/api/documents/${id}`),
+    create: (data) => j("/api/documents", { method: "POST", body: JSON.stringify(data) }),
+    upload: (file, category) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (category) formData.append("category", category);
+      return j("/api/documents/upload", { method: "POST", body: formData });
+    },
+    updateAudience: (id, data) => j(`/api/documents/${id}/audience`, { method: "POST", body: JSON.stringify(data) }),
+    updateStatus: (id, status) => j(`/api/documents/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+    addVersion: (id, content) => j(`/api/documents/${id}/versions`, { method: "POST", body: JSON.stringify({ content }) }),
+    downloadOriginal: (id) => j(`/api/documents/${id}/original`, { responseType: "blob" }),
+  },
+
+  // --- Chat ---
+  chat: {
+    ask: (question) => j("/api/chat", { method: "POST", body: JSON.stringify({ question }) }),
+  },
+
+  // --- Gaps ---
+  gaps: {
+    list: () => j("/api/gaps"),
+  },
+
+  // --- Agent log (журнал «мыслей» ассистента, только владелец) ---
+  agentLog: {
+    list: (limit = 200) => j(`/api/agent-log?limit=${limit}`),
+  },
+
+  // --- Quiz ---
+  quiz: {
+    generate: (id, num_questions = 5) => j(`/api/documents/${id}/quiz`, { method: "POST", body: JSON.stringify({ num_questions }) }),
+    grade: (quiz, answers) => j("/api/quiz/grade", { method: "POST", body: JSON.stringify({ quiz, answers }) }),
+  },
+
+  // --- Tracks (Onboarding) ---
+  tracks: {
+    create: (data) => j("/api/tracks", { method: "POST", body: JSON.stringify(data) }),
+    list: () => j("/api/tracks"),
+    get: (id) => j(`/api/tracks/${id}`),
+    addStep: (id, data) => j(`/api/tracks/${id}/steps`, { method: "POST", body: JSON.stringify(data) }),
+    updateStatus: (id, status) => j(`/api/tracks/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+    enroll: (id, user_id) => j(`/api/tracks/${id}/enroll`, { method: "POST", body: JSON.stringify({ user_id }) }),
+    enrollMe: (id) => j(`/api/tracks/${id}/enroll-me`, { method: "POST" }),
+    myEnrollments: () => j("/api/my/enrollments"),
+    submitStep: (enrollment_id, step_id, data) => j(`/api/enrollments/${enrollment_id}/steps/${step_id}/submit`, { method: "POST", body: JSON.stringify(data) }),
+    progress: (id) => j(`/api/tracks/${id}/progress`),
+  }
 };

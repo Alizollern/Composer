@@ -2,132 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ============ База ============ */
 @layer base {
-  :root {
-    color-scheme: light;
-  }
-  * {
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-  }
-  html {
-    scroll-behavior: smooth;
-  }
   body {
-    @apply bg-paper text-ink font-sans antialiased;
-    font-feature-settings: "ss01", "cv01";
+    @apply bg-[#fafafa] text-slate-900 font-sans antialiased selection:bg-brand-100 selection:text-brand-900 overflow-x-hidden;
   }
-  ::selection {
-    background: rgba(21, 160, 107, 0.22);
-  }
-  h1, h2, h3 {
-    @apply font-serif tracking-tightest;
-  }
-  /* Аккуратный скролл */
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-thumb { background: rgba(19,33,27,.16); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(19,33,27,.28); background-clip: padding-box; }
 }
 
-/* ============ Компоненты ============ */
 @layer components {
-  .container-x {
-    @apply mx-auto w-full max-w-container px-5 sm:px-7 lg:px-8;
-  }
-
-  /* Кнопки */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full font-medium
-           px-5 py-3 text-[15px] leading-none transition-all duration-200
-           select-none cursor-pointer disabled:opacity-55 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2;
   }
-  .btn-sm { @apply px-4 py-2.5 text-sm; }
   .btn-primary {
-    @apply bg-emerald text-white shadow-[0_8px_24px_-8px_rgba(21,160,107,.6)]
-           hover:bg-emerald-600 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_-10px_rgba(21,160,107,.7)]
-           active:translate-y-0;
+    @apply bg-slate-900 text-white hover:bg-slate-800 shadow-[0_2px_10px_rgba(0,0,0,0.1)] hover:shadow-[0_4px_14px_rgba(0,0,0,0.15)] hover:-translate-y-0.5;
   }
-  .btn-ghost {
-    @apply bg-white/0 text-ink border border-line hover:border-ink/30 hover:bg-white;
-  }
-  .btn-light {
-    @apply bg-white text-forest hover:bg-paper-deep hover:-translate-y-0.5;
-  }
-  .btn-glass {
-    @apply bg-white/10 text-white border border-white/20 backdrop-blur
-           hover:bg-white/20 hover:-translate-y-0.5;
+  .btn-secondary {
+    @apply bg-white text-slate-900 border border-slate-200 hover:border-slate-300 shadow-sm hover:shadow hover:-translate-y-0.5;
   }
 
-  /* Карточки */
-  .card {
-    @apply rounded-3xl bg-white border border-line p-7 shadow-soft transition-all duration-300;
-  }
-  .card-hover {
-    @apply hover:-translate-y-1 hover:shadow-lift hover:border-emerald/30;
-  }
-
-  .eyebrow {
-    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600;
-  }
-
-  /* Поля форм */
-  .field { @apply mb-4; }
-  .field > label { @apply block text-sm font-medium text-ink-soft mb-2; }
-  .input, .field input, .field textarea {
-    @apply w-full rounded-2xl border border-line bg-white px-4 py-3 text-[15px] text-ink
-           outline-none transition-all placeholder:text-ink-muted/70
-           focus:border-emerald focus:ring-4 focus:ring-emerald/10;
-  }
-
-  /* Точечный фон / grid */
-  .bg-grid {
-    background-image: radial-gradient(rgba(19,33,27,.07) 1px, transparent 1px);
-    background-size: 22px 22px;
-  }
-  .bg-grid-dark {
-    background-image: radial-gradient(rgba(255,255,255,.08) 1px, transparent 1px);
+  /* Dot Grid Pattern */
+  .bg-dot-pattern {
+    background-image: radial-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px);
     background-size: 24px 24px;
   }
-}
 
-/* ============ Markdown ============ */
-@layer components {
-  .md { @apply text-[15.5px] leading-relaxed text-ink-soft; }
-  .md > :first-child { margin-top: 0 !important; }
-  .md h1, .md h2, .md h3, .md h4 {
-    @apply font-serif text-ink tracking-tight mt-7 mb-3 leading-snug;
+  /* Spotlight effect wrapper */
+  .spotlight-card {
+    position: relative;
+    border-radius: 1.5rem;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    backdrop-filter: blur(12px);
+    overflow: hidden;
   }
-  .md h1 { @apply text-2xl; }
-  .md h2 { @apply text-xl; }
-  .md h3 { @apply text-lg; }
-  .md h4 { @apply text-base; }
-  .md p { @apply my-3; }
-  .md ul { @apply my-3 pl-5 list-disc marker:text-emerald; }
-  .md ol { @apply my-3 pl-5 list-decimal marker:text-emerald marker:font-semibold; }
-  .md li { @apply my-1.5; }
-  .md a { @apply text-emerald-600 underline underline-offset-2 decoration-emerald/40 hover:decoration-emerald; }
-  .md strong { @apply text-ink font-semibold; }
-  .md code { @apply rounded-md bg-paper-deep px-1.5 py-0.5 text-[13px] font-mono text-forest-700; }
-  .md pre { @apply my-4 overflow-x-auto rounded-2xl bg-forest-900 p-4 text-sm leading-relaxed; }
-  .md pre code { @apply bg-transparent p-0 text-emerald-400; }
-  .md blockquote { @apply my-4 border-l-2 border-emerald pl-4 italic text-ink-muted; }
-  .md hr { @apply my-6 border-line; }
-  .md table { @apply my-4 w-full border-collapse overflow-hidden rounded-xl text-sm; }
-  .md th { @apply bg-paper-deep px-3 py-2 text-left font-semibold text-ink border border-line; }
-  .md td { @apply px-3 py-2 align-top border border-line; }
-  .md tr:nth-child(even) td { @apply bg-paper; }
-
-  /* Markdown на тёмном фоне */
-  .md-dark { @apply text-white/75; }
-  .md-dark h1, .md-dark h2, .md-dark h3, .md-dark h4 { @apply text-white; }
-  .md-dark strong { @apply text-white; }
-  .md-dark code { @apply bg-white/10 text-emerald-400; }
+  .spotlight-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 1.5rem;
+    padding: 1px; /* border width */
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 1) 0%,
+      rgba(255, 255, 255, 0.1) 100%
+    );
+    -webkit-mask: 
+      linear-gradient(#fff 0 0) content-box, 
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
 }
 
-/* ============ Утилиты ============ */
-@layer utilities {
-  .no-scrollbar::-webkit-scrollbar { display: none; }
-  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  .text-balance { text-wrap: balance; }
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+.animation-delay-4000 {
+  animation-delay: 4s;
 }

@@ -1,84 +1,80 @@
-import { Link } from "react-router-dom";
+import React from "react";
 import { Check } from "lucide-react";
-import Reveal from "../components/Reveal.jsx";
-
-const PLANS = [
-  {
-    name: "Старт", price: "0", per: "пробный период", featured: false,
-    desc: "Познакомиться с двойником и проверить на своих задачах.",
-    feats: ["1 компания", "Командный центр и диалог", "Документы в папке компании", "Базовый контекст бизнеса"],
-    cta: "Начать бесплатно", to: "/app",
-  },
-  {
-    name: "Бизнес", price: "29 900 ₸", per: "в месяц", featured: true,
-    desc: "Для активной операционной работы одной компании.",
-    feats: ["До 3 компаний", "Безлимит поручений", "Анализ конкурентов и рынка", "История и накопление документов", "Приоритетная обработка"],
-    cta: "Выбрать Бизнес", to: "/app",
-  },
-  {
-    name: "Сеть", price: "Договорная", per: "", featured: false,
-    desc: "Для сетей и групп компаний с несколькими брендами.",
-    feats: ["Неограниченно компаний", "Командная работа", "Интеграции с вашими системами", "Выделенная поддержка"],
-    cta: "Связаться", to: "/contact",
-  },
-];
+import { Link } from "react-router-dom";
 
 export default function Pricing() {
   return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute left-1/2 top-0 h-72 w-[700px] -translate-x-1/2 rounded-full bg-emerald/10 blur-[110px]" />
-      <div className="container-x relative pt-20 pb-24">
-        <Reveal className="mx-auto max-w-2xl text-center">
-          <span className="eyebrow">Цены</span>
-          <h1 className="mt-4 text-5xl sm:text-6xl font-semibold text-ink text-balance">Простые тарифы</h1>
-          <p className="mt-5 text-lg text-ink-soft">
-            Платите за результат, а не за количество кнопок. Начните бесплатно.
-          </p>
-        </Reveal>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      <div className="text-center mb-16">
+        <h1 className="text-4xl font-extrabold text-slate-900 mb-4">Простые и понятные тарифы</h1>
+        <p className="text-xl text-slate-600">Без скрытых платежей. Отмена в любой момент.</p>
+      </div>
 
-        <div className="mt-16 grid items-stretch gap-6 lg:grid-cols-3">
-          {PLANS.map((p, i) => (
-            <Reveal key={p.name} delay={i * 0.1}>
-              <div
-                className={
-                  "relative flex h-full flex-col rounded-3xl border p-8 transition-all " +
-                  (p.featured
-                    ? "border-emerald/40 bg-forest-900 text-white shadow-lift lg:-mt-4 lg:mb-0"
-                    : "border-line bg-white shadow-soft hover:-translate-y-1 hover:shadow-lift")
-                }
-              >
-                {p.featured && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-white">
-                    Популярный
-                  </span>
-                )}
-                <h3 className="font-serif text-2xl font-semibold">{p.name}</h3>
-                <div className="mt-3 font-serif text-4xl font-semibold">
-                  {p.price}
-                  {p.per && <span className={"ml-1.5 text-base font-sans font-normal " + (p.featured ? "text-white/55" : "text-ink-muted")}>/ {p.per}</span>}
-                </div>
-                <p className={"mt-3 text-[15px] " + (p.featured ? "text-white/65" : "text-ink-soft")}>{p.desc}</p>
+      <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        {/* Старт */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm flex flex-col">
+          <h3 className="text-xl font-bold text-slate-900 mb-2">Старт</h3>
+          <p className="text-slate-500 mb-6">Для одной точки и небольшой команды.</p>
+          <div className="mb-6">
+            <span className="text-4xl font-extrabold text-slate-900">25 000 ₸</span>
+            <span className="text-slate-500">/мес</span>
+          </div>
+          <Link to="/register" className="btn btn-secondary w-full mb-8">Начать</Link>
+          <ul className="space-y-4 flex-1">
+            <PricingFeature text="До 10 сотрудников" />
+            <PricingFeature text="До 100 документов" />
+            <PricingFeature text="Чат по стандартам" />
+            <PricingFeature text="Базовая аналитика вопросов" />
+          </ul>
+        </div>
 
-                <ul className="mt-7 space-y-3">
-                  {p.feats.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-[15px]">
-                      <Check size={18} className={"mt-0.5 shrink-0 " + (p.featured ? "text-emerald-400" : "text-emerald-600")} />
-                      <span className={p.featured ? "text-white/85" : "text-ink-soft"}>{f}</span>
-                    </li>
-                  ))}
-                </ul>
+        {/* Сеть */}
+        <div className="bg-white border-2 border-brand-600 rounded-2xl p-8 shadow-md relative flex flex-col">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-brand-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">
+            Популярный
+          </div>
+          <h3 className="text-xl font-bold text-slate-900 mb-2">Сеть</h3>
+          <p className="text-slate-500 mb-6">Для растущей сети с несколькими точками.</p>
+          <div className="mb-6">
+            <span className="text-4xl font-extrabold text-slate-900">90 000 ₸</span>
+            <span className="text-slate-500">/мес</span>
+          </div>
+          <Link to="/register" className="btn btn-primary w-full mb-8">Начать</Link>
+          <ul className="space-y-4 flex-1">
+            <PricingFeature text="До 50 сотрудников" />
+            <PricingFeature text="Без лимита по документам" />
+            <PricingFeature text="Онбординг и тесты для новичков" />
+            <PricingFeature text="Карта пробелов в знаниях" />
+            <PricingFeature text="Доступ по ролям и точкам" />
+          </ul>
+        </div>
 
-                <Link
-                  to={p.to}
-                  className={"btn mt-8 w-full " + (p.featured ? "btn-primary" : "btn-ghost")}
-                >
-                  {p.cta}
-                </Link>
-              </div>
-            </Reveal>
-          ))}
+        {/* Корпоративный */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm flex flex-col">
+          <h3 className="text-xl font-bold text-slate-900 mb-2">Корпоративный</h3>
+          <p className="text-slate-500 mb-6">Для крупных сетей и франшиз.</p>
+          <div className="mb-6">
+            <span className="text-4xl font-extrabold text-slate-900">Индивидуально</span>
+          </div>
+          <a href="mailto:hello@evergreen.kz" className="btn btn-secondary w-full mb-8">Связаться с нами</a>
+          <ul className="space-y-4 flex-1">
+            <PricingFeature text="Без лимита по сотрудникам" />
+            <PricingFeature text="Сбор отзывов из мессенджеров" />
+            <PricingFeature text="Персональный менеджер" />
+            <PricingFeature text="Интеграции с вашими системами" />
+            <PricingFeature text="Приоритетная поддержка" />
+          </ul>
         </div>
       </div>
     </div>
+  );
+}
+
+function PricingFeature({ text }) {
+  return (
+    <li className="flex items-start">
+      <Check className="h-5 w-5 text-brand-600 mr-3 flex-shrink-0" />
+      <span className="text-slate-600 text-sm">{text}</span>
+    </li>
   );
 }

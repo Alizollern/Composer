@@ -1,126 +1,57 @@
-import { useEffect, useState } from "react";
-import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
-import Logo from "./Logo.jsx";
-
-const NAV = [
-  { to: "/features", label: "Возможности" },
-  { to: "/pricing", label: "Цены" },
-  { to: "/about", label: "О нас" },
-  { to: "/contact", label: "Контакты" },
-];
+import React from "react";
+import { Outlet, Link } from "react-router-dom";
+import { Sparkles, Globe } from "lucide-react";
+import { useLanguage } from "../app/LanguageContext";
 
 export default function SiteLayout() {
-  const [scrolled, setScrolled] = useState(false);
-  const [open, setOpen] = useState(false);
-  const loc = useLocation();
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-  useEffect(() => { setOpen(false); window.scrollTo(0, 0); }, [loc.pathname]);
+  const { language, setLanguage, t } = useLanguage();
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header
-        className={
-          "sticky top-0 z-50 transition-all duration-300 " +
-          (scrolled
-            ? "bg-paper/80 backdrop-blur-xl border-b border-line shadow-[0_1px_0_rgba(19,33,27,.04)]"
-            : "bg-transparent border-b border-transparent")
-        }
-      >
-        <div className="container-x flex h-16 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 font-serif text-[19px] font-semibold text-ink">
-            <Logo />
-            <span>Evergreen</span>
-          </Link>
+    <div className="min-h-screen bg-[#fafafa] font-sans flex flex-col text-slate-900 selection:bg-brand-100 selection:text-brand-900">
+      <header className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-8">
+              <Link to="/" className="flex items-center space-x-2">
+                <Sparkles className="h-6 w-6 text-brand-600" />
+                <span className="font-bold text-xl tracking-tight text-slate-900">Evergreen</span>
+              </Link>
+              <nav className="hidden md:flex space-x-6">
+                <Link to="/features" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{t('features')}</Link>
+                <Link to="/pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{t('pricing')}</Link>
+                <Link to="/about" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{t('about')}</Link>
+              </nav>
+            </div>
+            <div className="flex items-center space-x-4">
+              
+              {/* Language Switcher */}
+              <div className="relative group flex items-center text-sm font-medium text-slate-600 hover:text-slate-900 cursor-pointer">
+                <Globe size={16} className="mr-1.5" />
+                <span className="uppercase">{language}</span>
+                <div className="absolute top-full right-0 mt-2 w-32 bg-white border border-slate-200 rounded-xl shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all flex flex-col overflow-hidden">
+                  <button onClick={() => setLanguage('ru')} className={`px-4 py-2 text-left hover:bg-slate-50 ${language === 'ru' ? 'text-brand-600 font-bold bg-brand-50' : 'text-slate-700'}`}>Русский</button>
+                  <button onClick={() => setLanguage('kz')} className={`px-4 py-2 text-left hover:bg-slate-50 ${language === 'kz' ? 'text-brand-600 font-bold bg-brand-50' : 'text-slate-700'}`}>Қазақша</button>
+                  <button onClick={() => setLanguage('en')} className={`px-4 py-2 text-left hover:bg-slate-50 ${language === 'en' ? 'text-brand-600 font-bold bg-brand-50' : 'text-slate-700'}`}>English</button>
+                </div>
+              </div>
 
-          <nav className="hidden md:flex items-center gap-1">
-            {NAV.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                className={({ isActive }) =>
-                  "px-3.5 py-2 rounded-full text-[15px] transition-colors " +
-                  (isActive ? "text-emerald-600 font-medium" : "text-ink-soft hover:text-ink")
-                }
-              >
-                {n.label}
-              </NavLink>
-            ))}
-            <Link to="/app" className="btn btn-primary btn-sm ml-2">
-              Открыть двойника <ArrowUpRight size={16} />
-            </Link>
-          </nav>
+              <div className="w-px h-5 bg-slate-200 mx-2 hidden md:block"></div>
 
-          {/* Мобильное меню */}
-          <button
-            className="md:hidden grid place-items-center w-10 h-10 rounded-xl border border-line text-ink"
-            onClick={() => setOpen((v) => !v)}
-            aria-label="Меню"
-          >
-            <span className="relative block w-5 h-3">
-              <span className={"absolute left-0 top-0 h-0.5 w-5 bg-current transition-all " + (open ? "translate-y-1.5 rotate-45" : "")} />
-              <span className={"absolute left-0 bottom-0 h-0.5 w-5 bg-current transition-all " + (open ? "-translate-y-1 -rotate-45" : "")} />
-            </span>
-          </button>
-        </div>
-
-        {open && (
-          <div className="md:hidden border-t border-line bg-paper/95 backdrop-blur-xl">
-            <div className="container-x py-4 flex flex-col gap-1">
-              {NAV.map((n) => (
-                <NavLink key={n.to} to={n.to} className="px-3 py-3 rounded-xl text-ink-soft hover:bg-white">
-                  {n.label}
-                </NavLink>
-              ))}
-              <Link to="/app" className="btn btn-primary mt-2">Открыть двойника</Link>
+              <Link to="/login" className="hidden md:block text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">{t('login')}</Link>
+              <Link to="/register" className="btn btn-primary bg-slate-900">{t('getStarted')}</Link>
             </div>
           </div>
-        )}
+        </div>
       </header>
-
-      <main className="flex-1">
+      
+      <main className="flex-grow pt-16">
         <Outlet />
       </main>
 
-      <footer className="bg-forest-900 text-white/70 mt-24">
-        <div className="container-x py-16">
-          <div className="grid gap-10 md:grid-cols-[1.6fr_1fr_1fr]">
-            <div className="max-w-sm">
-              <Link to="/" className="flex items-center gap-2.5 font-serif text-xl font-semibold text-white">
-                <Logo />
-                <span>Evergreen</span>
-              </Link>
-              <p className="mt-4 text-[15px] leading-relaxed text-white/60">
-                Цифровой двойник руководителя. Поручайте операционную работу —
-                двойник соберёт данные, проанализирует и подготовит готовый результат.
-              </p>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold text-sm uppercase tracking-wider mb-4">Продукт</h4>
-              <div className="flex flex-col gap-2.5 text-[15px]">
-                <Link to="/features" className="hover:text-white transition-colors">Возможности</Link>
-                <Link to="/pricing" className="hover:text-white transition-colors">Цены</Link>
-                <Link to="/app" className="hover:text-white transition-colors">Открыть двойника</Link>
-              </div>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold text-sm uppercase tracking-wider mb-4">Компания</h4>
-              <div className="flex flex-col gap-2.5 text-[15px]">
-                <Link to="/about" className="hover:text-white transition-colors">О нас</Link>
-                <Link to="/contact" className="hover:text-white transition-colors">Контакты</Link>
-              </div>
-            </div>
-          </div>
-          <div className="mt-14 pt-7 border-t border-white/10 flex flex-col sm:flex-row gap-2 justify-between text-sm text-white/45">
-            <span>© {new Date().getFullYear()} Evergreen. Все права защищены.</span>
-            <span>Сделано для руководителей.</span>
-          </div>
+      <footer className="bg-white border-t border-slate-200 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-slate-500 text-sm flex flex-col items-center">
+          <Sparkles className="h-5 w-5 text-slate-300 mb-4" />
+          <p>&copy; {new Date().getFullYear()} Evergreen Intelligence. All rights reserved.</p>
         </div>
       </footer>
     </div>

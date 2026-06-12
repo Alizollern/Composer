@@ -1,58 +1,28 @@
-import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
-import {
-  ScrollText, Search, FileText, Building2, Activity, MessagesSquare, ArrowRight,
-} from "lucide-react";
-import Reveal, { container, item } from "../components/Reveal.jsx";
-
-const FEATURES = [
-  { ic: ScrollText, t: "Стандарты обслуживания", d: "Готовит регламенты сервиса по образцу мировых брендов и адаптирует под размер, бюджет и рынок вашей компании." },
-  { ic: Search, t: "Анализ конкурентов", d: "Изучает игроков рынка, их позиционирование и цены, собирает сводку с источниками и выводами." },
-  { ic: FileText, t: "Документы и регламенты", d: "Превращает задачу в чистый документ: планы запуска, инструкции, обращения к команде, отчёты." },
-  { ic: Building2, t: "Контекст компании", d: "Каждая компания — своя папка с профилем и документами. Двойник работает в контексте выбранного бизнеса." },
-  { ic: Activity, t: "Живой ход работы", d: "Видно каждый шаг двойника: что он ищет, что анализирует, на чём строит выводы — в реальном времени." },
-  { ic: MessagesSquare, t: "Диалог", d: "Быстрые вопросы и советы по бизнесу — двойник держит контекст беседы." },
-];
+import React from "react";
 
 export default function Features() {
   return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute left-1/2 top-0 h-72 w-[700px] -translate-x-1/2 rounded-full bg-emerald/10 blur-[110px]" />
-      <div className="container-x relative pt-20 pb-24">
-        <Reveal className="mx-auto max-w-2xl text-center">
-          <span className="eyebrow">Возможности</span>
-          <h1 className="mt-4 text-5xl sm:text-6xl font-semibold text-ink text-balance">Что умеет ваш двойник</h1>
-          <p className="mt-5 text-lg text-ink-soft">
-            Операционная работа, которую обычно делает команда заместителей — в одном помощнике.
-          </p>
-        </Reveal>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      <h1 className="text-4xl font-extrabold text-slate-900 mb-6">Возможности</h1>
+      <p className="text-xl text-slate-600 mb-12 max-w-3xl">Всё, чтобы держать стандарты сети под контролем и быстро вводить новых людей в работу.</p>
 
-        <motion.div
-          variants={container} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-80px" }}
-          className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
-        >
-          {FEATURES.map((f) => (
-            <motion.div key={f.t} variants={item} className="card card-hover">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald/10 text-emerald-600">
-                <f.ic size={22} />
-              </div>
-              <h3 className="mt-5 text-xl font-semibold text-ink">{f.t}</h3>
-              <p className="mt-2.5 text-[15px] leading-relaxed text-ink-soft">{f.d}</p>
-            </motion.div>
-          ))}
-        </motion.div>
-
-        <Reveal className="mt-16">
-          <div className="relative overflow-hidden rounded-[2rem] bg-forest-900 px-8 py-14 text-center">
-            <div className="pointer-events-none absolute inset-0 bg-grid-dark opacity-50" />
-            <div className="pointer-events-none absolute left-1/2 top-0 h-60 w-96 -translate-x-1/2 rounded-full bg-emerald/25 blur-[90px]" />
-            <h2 className="relative text-3xl sm:text-4xl font-semibold text-white">Посмотрите в деле</h2>
-            <p className="relative mt-3 text-white/65">Поручите двойнику первую задачу — это займёт минуту.</p>
-            <Link to="/app" className="btn btn-primary relative mt-7 px-6 py-3.5 text-base">
-              Открыть двойника <ArrowRight size={18} />
-            </Link>
-          </div>
-        </Reveal>
+      <div className="space-y-16">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Ответы строго по вашим документам</h2>
+          <p className="text-slate-600 max-w-3xl">Evergreen отвечает только тем, что есть в загруженных стандартах, и всегда показывает источник. Нет правила в документе — система прямо скажет «такого нет», а не придумает ответ. Это и есть доверие.</p>
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Разделение доступа по ролям</h2>
+          <p className="text-slate-600 max-w-3xl">Управляйте тем, кто что видит. Документы для управляющих не попадут к рядовым сотрудникам, а стандарты конкретной точки увидят только её сотрудники. Система соблюдает эти границы в каждом ответе.</p>
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Онбординг и проверка знаний</h2>
+          <p className="text-slate-600 max-w-3xl">Соберите документы в учебные треки. Новый сотрудник проходит их и отвечает на автогенерируемые тесты прямо в системе — управляющий экономит часы на обучении, а вы видите, кто реально готов к смене.</p>
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Карта пробелов в знаниях</h2>
+          <p className="text-slate-600 max-w-3xl">Система собирает вопросы, на которые в стандартах не нашлось ответа. Вы видите, чего не хватает в регламентах и что чаще всего спрашивает команда — и дорабатываете документы точечно.</p>
+        </div>
       </div>
     </div>
   );

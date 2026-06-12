@@ -1,290 +1,326 @@
+import React, { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
-import {
-  ArrowRight, ArrowUpRight, Check, Sparkles, FileText,
-  Search, ScrollText, Building2, Activity, MessagesSquare,
-} from "lucide-react";
-import Reveal, { container, item } from "../components/Reveal.jsx";
+import { motion, useScroll, useTransform } from "framer-motion";
+import { ArrowRight, Bot, Shield, Zap, Sparkles, Network, Dumbbell, Coffee, Scissors, ShoppingBag, Stethoscope, Car, Pill, UtensilsCrossed, Star } from "lucide-react";
+import { useLanguage } from "../app/LanguageContext";
 
-/* ---------- Живое превью «Командного центра» ---------- */
-const FLOW = [
-  { t: "Принял задачу и распределил работу", s: "done" },
-  { t: "Сбор информации по рынку и конкурентам", s: "done" },
-  { t: "Анализ данных и формулировка выводов", s: "run" },
-  { t: "Подготовка готового документа", s: "idle" },
+// Сети, которые «нам доверяют» (демо-данные для соцпруфа)
+const CLIENTS = [
+  { name: "Bronx Fitness", icon: Dumbbell },
+  { name: "Dala Burger", icon: UtensilsCrossed },
+  { name: "Bahyt Coffee", icon: Coffee },
+  { name: "Tumar Beauty", icon: Scissors },
+  { name: "Altyn Market", icon: ShoppingBag },
+  { name: "Zerde Dental", icon: Stethoscope },
+  { name: "Nomad Auto", icon: Car },
+  { name: "Samal Pharm", icon: Pill },
 ];
 
-function Preview() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 40, rotateX: 8 }}
-      animate={{ opacity: 1, y: 0, rotateX: 0 }}
-      transition={{ duration: 0.9, delay: 0.25, ease: [0.21, 0.6, 0.35, 1] }}
-      style={{ transformPerspective: 1200 }}
-      className="relative mx-auto mt-16 max-w-4xl"
-    >
-      <div className="absolute -inset-6 rounded-[2.4rem] bg-emerald/10 blur-3xl" />
-      <div className="relative overflow-hidden rounded-3xl border border-line bg-white shadow-lift">
-        {/* Шапка окна */}
-        <div className="flex items-center gap-2 border-b border-line bg-paper/70 px-5 py-3.5">
-          <span className="h-3 w-3 rounded-full bg-[#f5685b]" />
-          <span className="h-3 w-3 rounded-full bg-[#f6bd4f]" />
-          <span className="h-3 w-3 rounded-full bg-[#5fcd7e]" />
-          <span className="ml-3 text-[13px] text-ink-muted">Evergreen · Командный центр</span>
-        </div>
-
-        <div className="grid sm:grid-cols-[200px_1fr]">
-          {/* Боковая «постановка» */}
-          <div className="hidden sm:block border-r border-line p-5 bg-paper/40">
-            <div className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-3">Поручение</div>
-            <div className="space-y-2">
-              <div className="h-2.5 w-full rounded-full bg-ink/10" />
-              <div className="h-2.5 w-4/5 rounded-full bg-ink/10" />
-              <div className="h-2.5 w-3/5 rounded-full bg-ink/10" />
-            </div>
-            <div className="mt-6 text-xs font-semibold uppercase tracking-wider text-ink-muted mb-3">Компания</div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-emerald/10 px-3 py-1.5 text-[13px] font-medium text-emerald-600">
-              <Building2 size={13} /> Кофейня «Утро»
-            </div>
-          </div>
-
-          {/* Лента работы */}
-          <div className="p-6 space-y-3.5">
-            {FLOW.map((f, i) => (
-              <motion.div
-                key={f.t}
-                initial={{ opacity: 0, x: 12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6 + i * 0.25, duration: 0.5 }}
-                className="flex items-center gap-3"
-              >
-                <span
-                  className={
-                    "grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs " +
-                    (f.s === "done"
-                      ? "bg-emerald text-white"
-                      : f.s === "run"
-                      ? "bg-emerald/15 text-emerald-600 ring-2 ring-emerald/30"
-                      : "bg-ink/5 text-ink-muted")
-                  }
-                >
-                  {f.s === "done" ? <Check size={14} /> : f.s === "run" ? (
-                    <span className="h-2 w-2 rounded-full bg-emerald animate-pulse-soft" />
-                  ) : "•"}
-                </span>
-                <span className={"text-[14.5px] " + (f.s === "idle" ? "text-ink-muted" : "text-ink")}>{f.t}</span>
-              </motion.div>
-            ))}
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.9, duration: 0.6 }}
-              className="mt-5 rounded-2xl border border-line bg-paper/60 p-4"
-            >
-              <div className="flex items-center gap-2 text-[13px] font-medium text-emerald-600">
-                <FileText size={14} /> Анализ_конкурентов.md
-              </div>
-              <div className="mt-3 space-y-2">
-                <div className="h-2 w-full rounded-full bg-ink/8" />
-                <div className="h-2 w-11/12 rounded-full bg-ink/8" />
-                <div className="h-2 w-2/3 rounded-full bg-ink/8" />
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ---------- Контент ---------- */
-const ABILITIES = [
-  { ic: ScrollText, t: "Стандарты и процессы", d: "Готовит регламенты сервиса, инструкции и стандарты, адаптированные под вашу компанию и рынок." },
-  { ic: Search, t: "Анализ и исследования", d: "Изучает конкурентов, рынок и тренды, собирает факты с источниками и делает выводы." },
-  { ic: FileText, t: "Документы и решения", d: "Превращает данные в чёткие документы: планы, отчёты, обращения к команде." },
-];
-
-const STEPS = [
-  { n: "01", t: "Опишите задачу", d: "Обычными словами, как поставили бы её заместителю. Без технических настроек." },
-  { n: "02", t: "Двойник работает", d: "Собирает данные, анализирует, оформляет — вы видите каждый шаг в реальном времени." },
-  { n: "03", t: "Получаете результат", d: "Готовый документ сохраняется в папке компании. Копится база знаний бизнеса." },
-];
-
-const SHOWCASE = [
-  { ic: Building2, t: "Контекст компании", d: "Свой профиль и папка документов на каждый бизнес." },
-  { ic: Activity, t: "Видно ход работы", d: "Каждый шаг двойника — в реальном времени." },
-  { ic: MessagesSquare, t: "Диалог", d: "Быстрые вопросы и советы, с памятью беседы." },
+const TESTIMONIALS = [
+  {
+    quote: "Новые администраторы выходят на смену уверенно уже в первый день. Раньше на обучение уходила неделя — теперь пара часов.",
+    name: "Ляззат Иргалиева",
+    role: "Операционный директор, Bronx Fitness",
+  },
+  {
+    quote: "Скрипты и стандарты больше не лежат мёртвым грузом в Google Docs. Команда реально ими пользуется прямо на смене.",
+    name: "Арман Сейтказы",
+    role: "Управляющий сетью, Dala Burger",
+  },
+  {
+    quote: "Вижу, какие вопросы повторяются — и сразу понимаю, где у нас дыры в регламентах. Это бесценно для роста сети.",
+    name: "Динара Каримова",
+    role: "Основатель, Tumar Beauty",
+  },
 ];
 
 export default function Landing() {
+  const { scrollYProgress } = useScroll();
+  const y = useTransform(scrollYProgress, [0, 1], [0, 200]);
+  const { t } = useLanguage();
+
   return (
-    <>
-      {/* ===== HERO ===== */}
-      <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 bg-grid opacity-60 [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
-        <div className="pointer-events-none absolute left-1/2 top-[-10%] h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-emerald/15 blur-[120px]" />
+    <div className="relative w-full bg-[#fafafa] overflow-hidden">
+      
+      {/* Animated Background Gradients */}
+      <div className="absolute top-0 left-0 w-full h-screen overflow-hidden -z-10 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-brand-400/20 rounded-full mix-blend-multiply filter blur-[100px] animate-blob"></div>
+        <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-blue-400/20 rounded-full mix-blend-multiply filter blur-[100px] animate-blob animation-delay-2000"></div>
+        <div className="absolute bottom-[-20%] left-[20%] w-[40%] h-[40%] bg-purple-400/20 rounded-full mix-blend-multiply filter blur-[100px] animate-blob animation-delay-4000"></div>
+        <div className="absolute inset-0 bg-dot-pattern opacity-50"></div>
+      </div>
 
-        <div className="container-x relative pt-20 pb-10 sm:pt-28 text-center">
-          <motion.span
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
-            className="eyebrow rounded-full border border-emerald/25 bg-emerald/5 px-3.5 py-1.5"
-          >
-            <Sparkles size={13} /> Цифровой двойник руководителя
-          </motion.span>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.05 }}
-            className="mx-auto mt-7 max-w-4xl text-balance text-5xl sm:text-6xl lg:text-7xl font-semibold leading-[1.02] text-ink"
-          >
-            Двойник ведёт операционку,<br className="hidden sm:block" />{" "}
-            пока вы <em className="italic text-emerald-600">ведёте бизнес</em>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.15 }}
-            className="mx-auto mt-7 max-w-2xl text-lg sm:text-xl leading-relaxed text-ink-soft text-balance"
-          >
-            Опишите задачу обычными словами — Evergreen соберёт данные, проанализирует
-            и подготовит стандарты, отчёты и решения. Как опытный заместитель,
-            который работает 24/7 и знает контекст вашей компании.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.25 }}
-            className="mt-9 flex flex-wrap items-center justify-center gap-3"
-          >
-            <Link to="/app" className="btn btn-primary px-6 py-3.5 text-base">
-              Открыть двойника <ArrowRight size={18} />
-            </Link>
-            <Link to="/features" className="btn btn-ghost px-6 py-3.5 text-base">Что он умеет</Link>
-          </motion.div>
-
-          {/* Доверие */}
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.7, delay: 0.4 }}
-            className="mx-auto mt-12 flex max-w-xl flex-wrap items-stretch justify-center divide-x divide-line rounded-2xl"
-          >
-            {[
-              ["24/7", "всегда на связи"],
-              ["минуты", "вместо недель на задачу"],
-              ["∞", "компаний и проектов"],
-            ].map(([n, l]) => (
-              <div key={l} className="px-6 py-1 text-center">
-                <div className="font-serif text-2xl font-semibold text-ink">{n}</div>
-                <div className="mt-1 text-[13px] text-ink-muted">{l}</div>
-              </div>
-            ))}
-          </motion.div>
-
-          <Preview />
-        </div>
-      </section>
-
-      {/* ===== ВОЗМОЖНОСТИ ===== */}
-      <section className="container-x py-24 sm:py-28">
-        <Reveal className="mx-auto max-w-2xl text-center">
-          <span className="eyebrow">Что он умеет</span>
-          <h2 className="mt-4 text-4xl sm:text-5xl font-semibold text-ink text-balance">
-            Один двойник — вся операционная работа
-          </h2>
-          <p className="mt-4 text-lg text-ink-soft">
-            Не набор разрозненных инструментов, а единый помощник, который держит контекст вашего бизнеса.
-          </p>
-        </Reveal>
-
-        <motion.div
-          variants={container} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-80px" }}
-          className="mt-14 grid gap-6 md:grid-cols-3"
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 px-6 max-w-7xl mx-auto">
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="text-center max-w-4xl mx-auto"
         >
-          {ABILITIES.map((f) => (
-            <motion.div key={f.t} variants={item} className="card card-hover">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald/10 text-emerald-600">
-                <f.ic size={22} />
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white border border-slate-200 shadow-sm mb-8">
+            <Sparkles size={14} className="text-brand-600" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">{t('eyebrow')}</span>
+          </div>
+          
+          <h1 className="text-6xl md:text-8xl font-extrabold text-slate-900 tracking-tighter mb-8 leading-[1.1]">
+            {t('heroTitle1')} <br/>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 to-blue-600">
+              {t('heroTitle2')}
+            </span>
+          </h1>
+          
+          <p className="text-xl text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed">
+            {t('heroDesc')}
+          </p>
+          
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link to="/register" className="btn btn-primary px-8 py-4 text-lg w-full sm:w-auto group">
+              {t('startFreeTrial')} 
+              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+            <Link to="/login" className="btn btn-secondary px-8 py-4 text-lg w-full sm:w-auto">
+              {t('viewDemo')}
+            </Link>
+          </div>
+        </motion.div>
+
+        {/* Visual Product Representation */}
+        <motion.div 
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, delay: 0.3, ease: "easeOut" }}
+          style={{ y }}
+          className="mt-20 relative max-w-5xl mx-auto"
+        >
+          <div className="spotlight-card p-2 md:p-4 shadow-2xl shadow-brand-900/10">
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <div className="flex items-center px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+                <div className="flex space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-red-400/80"></div>
+                  <div className="w-3 h-3 rounded-full bg-amber-400/80"></div>
+                  <div className="w-3 h-3 rounded-full bg-green-400/80"></div>
+                </div>
+                <div className="mx-auto text-xs font-medium text-slate-400">Evergreen Chat</div>
               </div>
-              <h3 className="mt-5 text-xl font-semibold text-ink">{f.t}</h3>
-              <p className="mt-2.5 text-[15px] leading-relaxed text-ink-soft">{f.d}</p>
-            </motion.div>
-          ))}
+
+              <div className="p-6 md:p-10 bg-white relative">
+                 <div className="absolute inset-0 bg-dot-pattern opacity-[0.03]"></div>
+                 <div className="space-y-6 relative z-10">
+                   <div className="flex items-start max-w-2xl ml-auto justify-end">
+                     <div className="bg-slate-900 text-white px-5 py-3 rounded-2xl rounded-tr-sm text-sm">
+                       Клиент хочет заморозить абонемент на месяц. Что делать?
+                     </div>
+                   </div>
+                   <div className="flex items-start max-w-2xl">
+                     <div className="w-8 h-8 rounded-lg bg-brand-100 text-brand-600 flex items-center justify-center mr-4 shrink-0 mt-1">
+                       <Bot size={18} />
+                     </div>
+                     <div>
+                       <div className="bg-white border border-slate-200 shadow-sm px-5 py-4 rounded-2xl rounded-tl-sm text-sm text-slate-700 leading-relaxed">
+                         Заморозка доступна на срок от 7 до 30 дней при действующем абонементе. Оформите её в CRM через раздел «Абонемент → Пауза» и зафиксируйте причину со слов клиента. Платные карты можно замораживать один раз за период действия.
+                         <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Источник:</span>
+                           <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">Стандарты_администратора.pdf</span>
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+              </div>
+            </div>
+          </div>
         </motion.div>
       </section>
 
-      {/* ===== КАК РАБОТАЕТ ===== */}
-      <section className="bg-paper-deep/60 border-y border-line">
-        <div className="container-x py-24 sm:py-28">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <span className="eyebrow">Как это работает</span>
-            <h2 className="mt-4 text-4xl sm:text-5xl font-semibold text-ink text-balance">
-              Три шага — от задачи до результата
-            </h2>
-          </Reveal>
+      {/* Integrations Band */}
+      <section className="py-10 border-y border-slate-200 bg-white overflow-hidden relative">
+        <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-white to-transparent z-10"></div>
+        <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-white to-transparent z-10"></div>
+        <div className="max-w-7xl mx-auto px-6 text-center mb-6">
+          <p className="text-sm font-semibold uppercase tracking-widest text-slate-400">{t('integrationsTitle')}</p>
+        </div>
+        <div className="flex w-max animate-[shimmer_20s_linear_infinite] opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
+          {[...CLIENTS, ...CLIENTS].map((c, i) => (
+            <div key={i} className="px-12 flex items-center space-x-2 text-2xl font-bold text-slate-800 whitespace-nowrap">
+              <c.icon size={26} className="text-slate-400" />
+              <span>{c.name}</span>
+            </div>
+          ))}
+        </div>
+      </section>
 
-          <div className="mt-14 grid gap-6 md:grid-cols-3">
-            {STEPS.map((s, i) => (
-              <Reveal key={s.n} delay={i * 0.1}>
-                <div className="relative h-full rounded-3xl bg-white border border-line p-7 shadow-soft">
-                  <div className="font-serif text-5xl font-semibold text-emerald/25">{s.n}</div>
-                  <h3 className="mt-3 text-xl font-semibold text-ink">{s.t}</h3>
-                  <p className="mt-2.5 text-[15px] leading-relaxed text-ink-soft">{s.d}</p>
+      {/* How It Works Timeline */}
+      <section className="py-32 relative bg-white">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight">{t('howItWorksTitle')}</h2>
+          </div>
+          
+          <div className="relative border-l-2 border-slate-200 ml-6 md:ml-1/2 space-y-20">
+            {[
+              { num: 1, title: t('step1Title'), desc: t('step1Desc'), delay: 0 },
+              { num: 2, title: t('step2Title'), desc: t('step2Desc'), delay: 0.2 },
+              { num: 3, title: t('step3Title'), desc: t('step3Desc'), delay: 0.4 },
+            ].map((step, i) => (
+              <motion.div 
+                key={i}
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ duration: 0.6, delay: step.delay }}
+                className="relative pl-12"
+              >
+                <div className="absolute -left-[17px] top-0 w-8 h-8 bg-brand-100 border-4 border-white rounded-full flex items-center justify-center text-brand-600 font-bold text-sm">
+                  {step.num}
                 </div>
-              </Reveal>
+                <div className="bg-[#fafafa] p-8 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <h3 className="text-2xl font-bold text-slate-900 mb-3">{step.title}</h3>
+                  <p className="text-slate-600 leading-relaxed text-lg">{step.desc}</p>
+                </div>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ===== ТЁМНАЯ ВИТРИНА ===== */}
-      <section className="container-x py-24 sm:py-28">
-        <div className="relative overflow-hidden rounded-[2.5rem] bg-forest-900 px-7 py-16 sm:px-14 sm:py-20">
-          <div className="pointer-events-none absolute inset-0 bg-grid-dark opacity-50" />
-          <div className="pointer-events-none absolute -right-20 -top-20 h-80 w-80 rounded-full bg-emerald/25 blur-[100px]" />
-          <div className="relative grid gap-12 lg:grid-cols-2 lg:items-center">
-            <div>
-              <span className="eyebrow text-emerald-400">Почему это работает</span>
-              <h2 className="mt-4 text-4xl sm:text-5xl font-semibold text-white text-balance leading-[1.05]">
-                Не чат без следа,<br /> а заместитель с памятью
-              </h2>
-              <p className="mt-5 text-lg leading-relaxed text-white/65">
-                Каждая компания — своя папка с профилем и документами. Двойник
-                работает в её контексте и накапливает базу знаний вашего бизнеса.
-              </p>
-              <Link to="/app" className="btn btn-primary mt-8 px-6 py-3.5 text-base">
-                Попробовать <ArrowUpRight size={18} />
-              </Link>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-1">
-              {SHOWCASE.map((f) => (
-                <Reveal key={f.t} as="div">
-                  <div className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur transition-colors hover:bg-white/10">
-                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald/20 text-emerald-400">
-                      <f.ic size={20} />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">{f.t}</h3>
-                      <p className="mt-1 text-[15px] text-white/60">{f.d}</p>
-                    </div>
-                  </div>
-                </Reveal>
-              ))}
-            </div>
+      {/* Feature Section (Bento Grid) */}
+      <section className="py-32 relative z-10 bg-slate-50 border-t border-slate-200">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight">{t('featuresTitle')}</h2>
+            <p className="mt-4 text-xl text-slate-600">{t('featuresSubtitle')}</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <BentoCard 
+              icon={<Zap className="text-amber-500" />}
+              title={t('feat1Title')}
+              desc={t('feat1Desc')}
+              delay={0.1}
+            />
+            <BentoCard 
+              icon={<Shield className="text-brand-500" />}
+              title={t('feat2Title')}
+              desc={t('feat2Desc')}
+              delay={0.2}
+            />
+            <BentoCard 
+              icon={<Network className="text-blue-500" />}
+              title={t('feat3Title')}
+              desc={t('feat3Desc')}
+              delay={0.3}
+            />
+          </div>
+        </div>
+      </section>
+      
+      {/* Testimonials */}
+      <section className="py-32 relative bg-white border-t border-slate-200">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight">Сети уже работают на Evergreen</h2>
+            <p className="mt-4 text-xl text-slate-600">Меньше хаоса на смене, единый стандарт в каждой точке.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {TESTIMONIALS.map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ duration: 0.6, delay: i * 0.1 }}
+                className="bg-[#fafafa] p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full"
+              >
+                <div className="flex gap-1 mb-5 text-amber-400">
+                  {[1,2,3,4,5].map((s) => <Star key={s} size={16} fill="currentColor" />)}
+                </div>
+                <p className="text-slate-700 leading-relaxed text-lg flex-1">«{item.quote}»</p>
+                <div className="mt-6 pt-6 border-t border-slate-200">
+                  <div className="font-bold text-slate-900">{item.name}</div>
+                  <div className="text-sm text-slate-500">{item.role}</div>
+                </div>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ===== CTA ===== */}
-      <section className="container-x pb-28">
-        <Reveal className="mx-auto max-w-3xl text-center">
-          <h2 className="text-4xl sm:text-5xl font-semibold text-ink text-balance">
-            Передайте рутину двойнику
-          </h2>
-          <p className="mx-auto mt-4 max-w-xl text-lg text-ink-soft">
-            Освободите время для решений, которые двигают бизнес. Остальное двойник возьмёт на себя.
-          </p>
-          <Link to="/app" className="btn btn-primary mt-8 px-7 py-4 text-base">
-            Начать сейчас <ArrowRight size={18} />
+      {/* CTA Section */}
+      <section className="py-32 relative overflow-hidden border-t border-slate-200">
+        <div className="absolute inset-0 bg-slate-900">
+           <div className="absolute inset-0 bg-dot-pattern opacity-10"></div>
+        </div>
+        <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
+          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">{t('ctaTitle')}</h2>
+          <p className="text-xl text-slate-300 mb-10">{t('ctaDesc')}</p>
+          <Link to="/register" className="inline-flex items-center justify-center px-8 py-4 bg-white text-slate-900 font-bold rounded-full hover:bg-slate-100 transition-all shadow-[0_0_40px_rgba(255,255,255,0.2)] hover:shadow-[0_0_60px_rgba(255,255,255,0.3)] hover:-translate-y-1">
+            {t('ctaButton')}
           </Link>
-        </Reveal>
+        </div>
       </section>
-    </>
+
+    </div>
+  );
+}
+
+// Interactive Hover Card Component
+function BentoCard({ icon, title, desc, delay }) {
+  const divRef = useRef(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [opacity, setOpacity] = useState(0);
+
+  const handleMouseMove = (e) => {
+    if (!divRef.current || isFocused) return;
+    const div = divRef.current;
+    const rect = div.getBoundingClientRect();
+    setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    setOpacity(1);
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    setOpacity(0);
+  };
+
+  const handleMouseEnter = () => setOpacity(1);
+  const handleMouseLeave = () => setOpacity(0);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.6, delay }}
+      ref={divRef}
+      onMouseMove={handleMouseMove}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="relative spotlight-card p-8 group cursor-pointer h-full"
+    >
+      {/* Hover Spotlight */}
+      <div
+        className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-300 group-hover:opacity-100 z-20"
+        style={{
+          opacity,
+          background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(124, 58, 237, 0.1), transparent 40%)`,
+        }}
+      />
+      
+      <div className="relative z-10">
+        <div className="w-12 h-12 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+          {icon}
+        </div>
+        <h3 className="text-xl font-bold text-slate-900 mb-3">{title}</h3>
+        <p className="text-slate-600 leading-relaxed text-sm">{desc}</p>
+      </div>
+    </motion.div>
   );
 }
