@@ -14,10 +14,17 @@ __pycache__/
 .venv/
 venv/
 
+# Фронт: node_modules не нужен (фронт собирается на этапе node в Dockerfile),
+# dist пересобирается там же.
+frontend/node_modules/
+frontend/dist/
+
 # Рантайм-данные (создаются в контейнере/монтируются томом)
 workspace/
 memory.json
 memory_chat_*.json
 
-# Прочее
+# Доки/планы — в образе не нужны
 README.md
+IMPLEMENTATION_PLAN.md
+COMPOSER_PLAN.md

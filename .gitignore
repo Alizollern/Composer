@@ -13,6 +13,8 @@ venv/
 memory.json
 memory_chat_*.json
 workspace/
+var/
+*.db
 
 # Frontend (React+Vite)
 frontend/node_modules/

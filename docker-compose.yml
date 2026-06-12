@@ -1,23 +1,101 @@
-# Composer AI — поднять весь бэкенд одной командой:
-#   export ANTHROPIC_API_KEY=sk-ant-...
+# Evergreen — поднять всё одной командой, ничего не ставя локально:
+#
+#   cp .env.example .env        # вписать ключи
 #   docker compose up --build
-# API будет на http://localhost:8000  (Swagger: /docs)
+#
+# Приложение:  http://localhost:8000   (Swagger: /docs)
+# Postgres:    localhost:5432          (db=evergreen, user=evergreen, pass=evergreen)
+#
+# В контейнере уже есть: Postgres 16 + pgvector (для RAG), бэкенд, собранный фронт.
 
 services:
-  composer:
+  db:
+    image: pgvector/pgvector:pg16      # Postgres 16 с предустановленным pgvector
+    environment:
+      POSTGRES_DB: evergreen
+      POSTGRES_USER: evergreen
+      POSTGRES_PASSWORD: evergreen
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # init-скрипт включает расширение vector в базе evergreen при первом старте
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evergreen -d evergreen"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
     build: .
     ports:
       - "8000:8000"
     environment:
-      # Ключ берётся из окружения хоста, в образ НЕ зашивается.
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Ключи берутся из окружения хоста / .env, в образ НЕ зашиваются.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - COMPOSER_PROVIDER=${COMPOSER_PROVIDER:-claude}
       - COMPOSER_MODEL=${COMPOSER_MODEL:-claude-sonnet-4-5}
-      - COMPOSER_MAX_TOKENS=${COMPOSER_MAX_TOKENS:-4096}
-      - COMPOSER_MAX_STEPS=${COMPOSER_MAX_STEPS:-20}
+      - COMPOSER_MAX_STEPS=${COMPOSER_MAX_STEPS:-10}
+      # Подключение к БД внутри сети compose (хост = имя сервиса db).
+      - EVERGREEN_DATABASE_URL=postgresql+psycopg://evergreen:evergreen@db:5432/evergreen
+      - EVERGREEN_JWT_SECRET=${EVERGREEN_JWT_SECRET:-dev-only-change-me}
+      # Размерность pgvector-колонки. ДОЛЖНА совпадать с моделью эмбеддингов
+      # (Gemini text-embedding-004 → 768). При смене модели нужна реиндексация.
+      - EVERGREEN_EMBEDDING_DIM=${EVERGREEN_EMBEDDING_DIM:-768}
+      # Хранилище оригиналов. По умолчанию — local (папка в томе storagedata).
+      # Чтобы переключиться на MinIO (профиль s3 ниже): EVERGREEN_STORAGE_BACKEND=s3.
+      - EVERGREEN_STORAGE_BACKEND=${EVERGREEN_STORAGE_BACKEND:-local}
+      - EVERGREEN_STORAGE_DIR=/app/var/storage
+      - EVERGREEN_S3_ENDPOINT=${EVERGREEN_S3_ENDPOINT:-http://minio:9000}
+      - EVERGREEN_S3_BUCKET=${EVERGREEN_S3_BUCKET:-evergreen-docs}
+      - EVERGREEN_S3_ACCESS_KEY=${EVERGREEN_S3_ACCESS_KEY:-evergreen}
+      - EVERGREEN_S3_SECRET_KEY=${EVERGREEN_S3_SECRET_KEY:-evergreen-secret}
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
-      # Агенты — это папки. Монтируем, чтобы create_agent сохранял их на хост
-      # и можно было добавлять агентов без пересборки образа.
+      # Агенты и данные — папки. Монтируем, чтобы менять без пересборки образа.
       - ./agents:/app/agents
-      # Результаты работы агентов сохраняются на хост.
       - ./workspace:/app/workspace
+      - ./knowledge:/app/knowledge
+      # Оригиналы документов (local-хранилище) — в именованном томе, переживают пересборку.
+      - storagedata:/app/var/storage
     restart: unless-stopped
+
+  # ----- MinIO: S3-совместимое хранилище (опционально) -----
+  # Включается профилем:  docker compose --profile s3 up
+  # Затем выставь EVERGREEN_STORAGE_BACKEND=s3 для backend.
+  minio:
+    image: minio/minio:latest
+    profiles: ["s3"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${EVERGREEN_S3_ACCESS_KEY:-evergreen}
+      MINIO_ROOT_PASSWORD: ${EVERGREEN_S3_SECRET_KEY:-evergreen-secret}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # веб-консоль
+    volumes:
+      - miniodata:/data
+    restart: unless-stopped
+
+  # Одноразовый бутстрап: создаёт bucket в MinIO при старте профиля s3.
+  minio-init:
+    image: minio/mc:latest
+    profiles: ["s3"]
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 ${EVERGREEN_S3_ACCESS_KEY:-evergreen} ${EVERGREEN_S3_SECRET_KEY:-evergreen-secret}; do sleep 2; done;
+      mc mb -p local/${EVERGREEN_S3_BUCKET:-evergreen-docs};
+      echo 'bucket ready';
+      "
+
+volumes:
+  pgdata:
+  storagedata:
+  miniodata:

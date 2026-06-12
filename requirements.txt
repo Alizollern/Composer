@@ -1,6 +1,17 @@
+# --- Движок (composer) ---
 anthropic>=0.40
 google-genai>=1.0
 ddgs>=9.0
 fastapi>=0.110
 uvicorn[standard]>=0.29
 pymupdf4llm>=0.0.17
+
+# --- Продукт Evergreen: БД, RAG, auth ---
+sqlalchemy>=2.0
+alembic>=1.13
+psycopg[binary]>=3.2
+pgvector>=0.3
+python-jose[cryptography]>=3.3
+passlib>=1.7
+python-multipart>=0.0.9
+boto3>=1.34

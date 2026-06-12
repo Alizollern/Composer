@@ -1,6 +1,7 @@
-# Порядок агентов в пайплайне оркестратора (по строке на агента).
+# Порядок агентов в статическом пайплайне (по строке на агента).
 # Это просто имена папок из agents/. Меняй порядок/состав как угодно.
-# employee_assistant сюда НЕ ставим — он для чата (python3 chat.py employee_assistant).
-standards_creator
-standards_editor
-advisor
+# Основной режим — динамический оркестратор (agents/orchestrator), он сам решает,
+# кого звать. Этот файл нужен только для линейного pipeline-режима.
+researcher
+analyst
+writer
