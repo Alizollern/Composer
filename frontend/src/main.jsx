@@ -22,6 +22,7 @@ import Register from "./app/Register.jsx";
 import Layout from "./app/Layout.jsx";
 import Chat from "./app/Chat.jsx";
 import KnowledgeBase from "./app/KnowledgeBase.jsx";
+import Learning from "./app/Learning.jsx";
 import AssistantLog from "./app/AssistantLog.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -54,6 +55,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
               <Route index element={<Navigate to="chat" replace />} />
               <Route path="chat" element={<Chat />} />
               <Route path="knowledge" element={<KnowledgeBase />} />
+              <Route path="learning" element={<Learning />} />
               <Route path="assistant-log" element={<AssistantLog />} />
             </Route>
 

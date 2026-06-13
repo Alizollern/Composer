@@ -83,6 +83,14 @@ def create_user(
     return user
 
 
+def list_users(db: Session, company_id: str) -> list[m.User]:
+    """Все пользователи компании (для назначения обучения и обзора команды)."""
+    return list(db.execute(
+        select(m.User)
+        .where(m.User.company_id == company_id)
+        .order_by(m.User.created_at)).scalars().all())
+
+
 def authenticate(db: Session, *, slug: str, email: str, password: str) -> m.User:
     """Проверить вход по компании (slug) + email + пароль. Бросает AccountError."""
     company = db.execute(select(m.Company).where(m.Company.slug == slug)).scalars().first()

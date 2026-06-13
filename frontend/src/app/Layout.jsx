@@ -13,9 +13,9 @@ export default function Layout() {
     const items = [
       { path: "/app/chat", label: "Ассистент", icon: MessageSquare, roles: ["employee", "manager", "owner"] },
       { path: "/app/knowledge", label: "База знаний", icon: BookOpen, roles: ["employee", "manager", "owner"] },
+      { path: "/app/learning", label: "Обучение", icon: GraduationCap, roles: ["employee", "manager", "owner"] },
       { path: "/app/assistant-log", label: "Журнал ассистента", icon: ScrollText, roles: ["owner"] },
       // Страницы ниже пока не реализованы во фронте — вернуть, когда появятся роуты:
-      // { path: "/app/learning", label: "Обучение", icon: GraduationCap, roles: ["employee", "manager", "owner"] },
       // { path: "/app/tracks", label: "Треки", icon: Map, roles: ["manager", "owner"] },
       // { path: "/app/team", label: "Команда", icon: Users, roles: ["manager", "owner"] },
     ];

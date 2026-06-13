@@ -239,6 +239,17 @@ def get_document(db: Session, company_id: str, document_id: str) -> m.Document:
     return _get_owned(db, company_id, document_id)
 
 
+def get_content(db: Session, company_id: str, document_id: str) -> str:
+    """Текст текущей версии документа (для уроков/карточек обучения).
+
+    KeyError — если документа нет или у него ещё нет версии с содержимым."""
+    doc = _get_owned(db, company_id, document_id)
+    version = db.get(m.DocumentVersion, doc.current_version_id) if doc.current_version_id else None
+    if version is None:
+        raise KeyError("У документа нет содержимого")
+    return version.content or ""
+
+
 def get_original(
     db: Session, company_id: str, document_id: str,
     *, storage: Optional[Storage] = None,

@@ -86,7 +86,8 @@ def _validate(items: List[dict]) -> List[dict]:
     return clean
 
 
-def generate_quiz(text: str, *, num_questions: int = 5, llm=None) -> List[dict]:
+def generate_quiz(text: str, *, num_questions: int = 5, llm=None,
+                  company: str | None = None) -> List[dict]:
     """Сгенерировать тест по тексту стандарта. Возвращает список вопросов."""
     if not text.strip():
         raise QuizError("Пустой текст стандарта")
@@ -94,7 +95,8 @@ def generate_quiz(text: str, *, num_questions: int = 5, llm=None) -> List[dict]:
         f"Сделай {num_questions} вопросов с одним верным ответом по тексту ниже.\n\n"
         f"=== ТЕКСТ СТАНДАРТА ===\n{text}"
     )
-    raw = brain.complete(_SYSTEM, user, llm=llm)
+    raw = brain.complete(_SYSTEM, user, llm=llm,
+                         operation="quiz_generate", company=company)
     return _validate(_parse_quiz(raw))[:num_questions]
 
 
@@ -107,7 +109,36 @@ def generate_quiz_for_document(
     version = db.get(m.DocumentVersion, doc.current_version_id) if doc.current_version_id else None
     if version is None:
         raise QuizError("У документа нет текущей версии")
-    return generate_quiz(version.content, num_questions=num_questions, llm=llm)
+    return generate_quiz(version.content, num_questions=num_questions, llm=llm,
+                         company=company_id)
+
+
+def public_questions(questions: List[dict]) -> List[dict]:
+    """Вид теста для клиента: только вопрос и варианты, без верного ответа и
+    цитаты. Правильные ответы (correct_index/source_quote) остаются на сервере."""
+    return [{"question": q["question"], "options": list(q["options"])}
+            for q in questions]
+
+
+def store_quiz(db: Session, company_id: str, document_id: str,
+               questions: List[dict], *, user_id: Optional[str] = None) -> m.QuizInstance:
+    """Сохранить сгенерированный тест (с ответами) на сервере. Возвращает запись,
+    её id выступает токеном теста для клиента."""
+    inst = m.QuizInstance(
+        company_id=company_id, document_id=document_id,
+        user_id=user_id, questions=questions)
+    db.add(inst)
+    db.commit()
+    db.refresh(inst)
+    return inst
+
+
+def load_quiz(db: Session, company_id: str, quiz_token: str) -> m.QuizInstance:
+    """Достать сохранённый тест по токену в рамках компании (иначе KeyError)."""
+    inst = db.get(m.QuizInstance, quiz_token)
+    if inst is None or inst.company_id != company_id:
+        raise KeyError("Тест не найден")
+    return inst
 
 
 def grade(quiz: List[dict], answers: List[int]) -> dict:

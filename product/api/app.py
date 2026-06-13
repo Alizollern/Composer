@@ -99,6 +99,15 @@ def create_app() -> FastAPI:
         return s.UserOut(id=user.id, email=user.email, role=user.role,
                          full_name=user.full_name, point_id=user.point_id)
 
+    @app.get("/api/users", response_model=list[s.UserOut])
+    def list_users(principal: Principal = Depends(require_manager),
+                   db: Session = Depends(get_db)):
+        # Команда компании — для назначения обучения и обзора (управляющий/owner).
+        users = accounts.list_users(db, principal.company_id)
+        return [s.UserOut(id=u.id, email=u.email, role=u.role,
+                          full_name=u.full_name, point_id=u.point_id)
+                for u in users]
+
     # ------------------------ Documents (M1) ------------------------
     @app.post("/api/documents", response_model=s.DocumentOut, status_code=201)
     def ingest_document(body: s.IngestTextIn,
@@ -151,6 +160,27 @@ def create_app() -> FastAPI:
                 role=principal.role, point_id=principal.point_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ не найден")
         return _doc_out(doc)
+
+    @app.get("/api/documents/{document_id}/content", response_model=s.DocumentContentOut)
+    def get_document_content(document_id: str,
+                             principal: Principal = Depends(require_employee),
+                             db: Session = Depends(get_db)):
+        # Текст стандарта для уроков/карточек обучения. Та же проверка аудитории,
+        # что и для метаданных: сотрудник не читает чужие стандарты.
+        try:
+            doc = kb.get_document(db, principal.company_id, document_id)
+        except KeyError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ не найден")
+        if principal.role == ROLE_EMPLOYEE and not kb.audience_ok(
+                doc.audience_roles, doc.point_id,
+                role=principal.role, point_id=principal.point_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ не найден")
+        try:
+            content = kb.get_content(db, principal.company_id, document_id)
+        except KeyError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "У документа нет содержимого")
+        return s.DocumentContentOut(
+            id=doc.id, title=doc.title, category=doc.category, content=content)
 
     @app.post("/api/documents/{document_id}/audience", response_model=s.DocumentOut)
     def set_audience(document_id: str, body: s.AudienceIn,
@@ -227,8 +257,19 @@ def create_app() -> FastAPI:
     # ----------------------- Onboarding (M3) ------------------------
     @app.post("/api/documents/{document_id}/quiz", response_model=s.QuizOut)
     def make_quiz(document_id: str, body: s.QuizGenIn,
-                  principal: Principal = Depends(require_manager),
+                  principal: Principal = Depends(require_employee),
                   db: Session = Depends(get_db)):
+        # Тест нужен и сотруднику (прохождение шага обучения), и управляющему
+        # (предпросмотр). Сотрудник получает тест только по стандарту своей
+        # аудитории — та же проверка, что и при чтении документа.
+        if principal.role == ROLE_EMPLOYEE:
+            try:
+                doc = kb.get_document(db, principal.company_id, document_id)
+            except KeyError:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ не найден")
+            if not kb.audience_ok(doc.audience_roles, doc.point_id,
+                                  role=principal.role, point_id=principal.point_id):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ не найден")
         try:
             questions = onboarding.generate_quiz_for_document(
                 db, principal.company_id, document_id,
@@ -237,14 +278,25 @@ def create_app() -> FastAPI:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Документ не найден")
         except QuizError as e:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
-        return s.QuizOut(document_id=document_id,
-                         questions=[s.QuizQuestionOut(**q) for q in questions])
+        # Полный тест (с ответами) сохраняем на сервере; клиенту — токен и вопросы
+        # без правильных ответов. Сдача и оценка идут по токену против этой копии.
+        inst = onboarding.store_quiz(
+            db, principal.company_id, document_id, questions,
+            user_id=principal.user_id)
+        return s.QuizOut(
+            document_id=document_id, quiz_token=inst.id,
+            questions=[s.QuizQuestionOut(**q)
+                       for q in onboarding.public_questions(questions)])
 
     @app.post("/api/quiz/grade", response_model=s.GradeOut)
     def grade_quiz(body: s.GradeIn,
-                   principal: Principal = Depends(require_employee)):
-        quiz = [q.model_dump() for q in body.quiz]
-        return s.GradeOut(**onboarding.grade(quiz, body.answers))
+                   principal: Principal = Depends(require_employee),
+                   db: Session = Depends(get_db)):
+        try:
+            inst = onboarding.load_quiz(db, principal.company_id, body.quiz_token)
+        except KeyError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Тест не найден")
+        return s.GradeOut(**onboarding.grade(inst.questions, body.answers))
 
     # ------------------- Tracks / Onboarding progress (M3) -------------------
     @app.post("/api/tracks", response_model=s.TrackOut, status_code=201)
@@ -255,6 +307,22 @@ def create_app() -> FastAPI:
             db, principal.company_id, title=body.title,
             description=body.description, created_by=principal.user_id)
         return _track_out(track)
+
+    @app.post("/api/tracks/auto", response_model=s.TrackDetailOut, status_code=201)
+    def autobuild_track(body: s.TrackAutoBuildIn,
+                        principal: Principal = Depends(require_manager),
+                        db: Session = Depends(get_db)):
+        # Собрать черновик курса из всех опубликованных стандартов в один клик.
+        try:
+            track = tracks.autobuild_track(
+                db, principal.company_id, title=body.title,
+                description=body.description, require_quiz=body.require_quiz,
+                pass_score=body.pass_score, num_questions=body.num_questions,
+                created_by=principal.user_id)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        steps = tracks.list_steps(db, principal.company_id, track.id)
+        return _track_detail_out(track, steps)
 
     @app.get("/api/tracks", response_model=list[s.TrackOut])
     def list_tracks(principal: Principal = Depends(require_employee),
@@ -287,6 +355,17 @@ def create_app() -> FastAPI:
         except KeyError:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Трек или документ не найден")
         return _step_out(step)
+
+    @app.delete("/api/tracks/{track_id}/steps/{step_id}", status_code=204)
+    def delete_track_step(track_id: str, step_id: str,
+                          principal: Principal = Depends(require_manager),
+                          db: Session = Depends(get_db)):
+        # Убрать шаг из курса (правка черновика до публикации).
+        try:
+            tracks.delete_step(db, principal.company_id, track_id, step_id)
+        except KeyError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Трек или шаг не найден")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.post("/api/tracks/{track_id}/status", response_model=s.TrackOut)
     def set_track_status(track_id: str, body: s.TrackStatusIn,
@@ -351,12 +430,11 @@ def create_app() -> FastAPI:
     def submit_step(enrollment_id: str, step_id: str, body: s.SubmitStepIn,
                     principal: Principal = Depends(require_employee),
                     db: Session = Depends(get_db)):
-        quiz = [q.model_dump() for q in body.quiz] if body.quiz else None
         try:
             result = tracks.submit_step(
                 db, principal.company_id, principal.user_id,
                 enrollment_id=enrollment_id, step_id=step_id,
-                quiz=quiz, answers=body.answers)
+                quiz_token=body.quiz_token, answers=body.answers)
         except PermissionError:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Это чужое зачисление")
         except KeyError as ex:
@@ -379,9 +457,50 @@ def create_app() -> FastAPI:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Трек не найден")
         return [s.TrackProgressRowOut(**r) for r in rows]
 
+    # ------------------- Журнал «мыслей» ассистента -------------------
+    @app.get("/api/agent-log")
+    def agent_log(limit: int = 200,
+                  principal: Principal = Depends(require_owner)):
+        # Только владелец видит журнал ИИ (контроль). Записи скоупим по компании:
+        # показываем общие события и события своей компании, чужие — отсекаем.
+        from product.agent_log import read_recent
+        rows = read_recent(limit=limit)
+        cid = principal.company_id
+        return [r for r in rows if r.get("company") in (None, cid)]
+
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
+
+    # ---------------------- Фронтенд (SPA) ----------------------
+    # Docker-образ кладёт собранный фронт в frontend/dist. Отдаём его прямо из
+    # бэкенда, чтобы всё приложение жило на одном порту (http://localhost:8000).
+    # /api/* регистрируются ВЫШE и имеют приоритет; ниже — статика и SPA-фолбэк
+    # (любой клиентский маршрут вроде /app/chat при перезагрузке отдаёт index.html).
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    _dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    if _dist.is_dir():
+        assets = _dist / "assets"
+        if assets.is_dir():
+            app.mount("/assets", StaticFiles(directory=str(assets)), name="assets")
+
+        @app.get("/")
+        def _spa_index():
+            return FileResponse(str(_dist / "index.html"))
+
+        @app.get("/{full_path:path}")
+        def _spa_fallback(full_path: str):
+            # На несуществующий /api/* отвечаем честным 404 (а не HTML-страницей),
+            # чтобы клиент видел ошибку API, а не «пустую» 200.
+            if full_path.startswith("api/"):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+            candidate = _dist / full_path
+            if candidate.is_file():
+                return FileResponse(str(candidate))
+            return FileResponse(str(_dist / "index.html"))
 
     return app
 

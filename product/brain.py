@@ -17,6 +17,8 @@ from composer.engine.providers import get_provider
 from composer.orchestration.runner import run_agent_by_name
 from composer.orchestration.planner import orchestrate_dynamic
 
+from product.agent_log import log_call, log_event
+
 
 def provider(name=None, **kwargs):
     """Вернуть LLM-провайдер. По умолчанию — из COMPOSER_PROVIDER (claude|gemini)."""
@@ -30,10 +32,13 @@ def run_agent(agent_name, task, *, company=None, llm=None, on_event=None,
     company — слаг компании (мультитенант: прогон скоупится в её папку/данные).
     Возвращает dict: {"agent", "final", "saved", "is_orchestrator"}.
     """
-    return run_agent_by_name(
-        agent_name, task, llm=llm, on_event=on_event,
-        history=history, company=company, output_name=output_name,
-    )
+    with log_call("agent.run", agent=agent_name, company=company, task=task) as ev:
+        result = run_agent_by_name(
+            agent_name, task, llm=llm, on_event=on_event,
+            history=history, company=company, output_name=output_name,
+        )
+        ev.set_output((result or {}).get("final"))
+    return result
 
 
 def orchestrate(goal, *, company=None, orchestrator=None, llm=None, on_event=None):
@@ -41,13 +46,17 @@ def orchestrate(goal, *, company=None, orchestrator=None, llm=None, on_event=Non
     делегирует суб-агентам (в т.ч. параллельно). Возвращает структурированный
     результат с финальным текстом и созданными файлами.
     """
-    return orchestrate_dynamic(
-        goal, orchestrator=orchestrator, on_event=on_event,
-        llm=llm, company=company,
-    )
+    with log_call("agent.orchestrate", goal=goal, company=company,
+                  orchestrator=orchestrator) as ev:
+        result = orchestrate_dynamic(
+            goal, orchestrator=orchestrator, on_event=on_event,
+            llm=llm, company=company,
+        )
+        ev.set_output((result or {}).get("final"))
+    return result
 
 
-def complete(system, user, *, llm=None):
+def complete(system, user, *, llm=None, operation="complete", company=None):
     """Один контролируемый вызов LLM без агентного цикла и без инструментов.
 
     Нужен там, где продукту требуется ПРЕДСКАЗУЕМЫЙ ответ по строгому контракту,
@@ -56,8 +65,15 @@ def complete(system, user, *, llm=None):
 
     llm — провайдер (для тестов можно подменить фейком); по умолчанию берётся
     из окружения (claude|gemini).
+
+    Каждый вызов попадает в журнал агента (product/agent_log): видно system-
+    инструкцию, вход и ответ модели — это и есть «мысли» ИИ для контроля.
     """
     llm = llm or get_provider()
     messages = [{"role": "user", "content": user}]
-    result = llm.call(system, messages, [])
-    return (result.get("text") or "").strip()
+    with log_call("llm.complete", operation=operation, company=company,
+                  system=system, prompt=user) as ev:
+        result = llm.call(system, messages, [])
+        text = (result.get("text") or "").strip()
+        ev.set_output(text)
+    return text

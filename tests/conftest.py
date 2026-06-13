@@ -18,6 +18,8 @@ import pytest
 
 # Форсим офлайн-эмбеддер ДО импорта продуктовых модулей.
 os.environ["EVERGREEN_EMBEDDER"] = "fake"
+# Тесты не должны писать журнал агента в рабочую директорию — выключаем его.
+os.environ["EVERGREEN_AGENT_LOG_ENABLED"] = "0"
 os.environ.setdefault("EVERGREEN_JWT_SECRET", "test-secret")
 # Хранилище оригиналов — локальная папка во временном каталоге (изолированно,
 # чтобы тесты не писали в рабочую директорию репозитория).
@@ -70,7 +72,7 @@ _FAKE_QUIZ_JSON = (
 )
 
 
-def _fake_complete(system, user, *, llm=None):
+def _fake_complete(system, user, *, llm=None, **_):
     """Детерминированная замена LLM:
       * запрос на генерацию теста (M3) — возвращает валидный JSON-массив;
       * запрос чат-бота (M2) с фрагментами — ответ со ссылкой;

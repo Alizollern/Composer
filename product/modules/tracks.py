@@ -98,6 +98,53 @@ def list_steps(db: Session, company_id: str, track_id: str) -> List[m.TrackStep]
     return list(db.execute(stmt).scalars().all())
 
 
+def delete_step(db: Session, company_id: str, track_id: str, step_id: str) -> None:
+    """Убрать шаг из трека (правка курса до публикации). Остальные шаги
+    переупорядочиваются, чтобы ordinal шёл без дыр."""
+    get_track(db, company_id, track_id)  # проверка владения
+    step = db.get(m.TrackStep, step_id)
+    if step is None or step.track_id != track_id or step.company_id != company_id:
+        raise KeyError("Шаг не найден")
+    db.delete(step)
+    db.flush()
+    # Перенумеровать оставшиеся шаги (0,1,2,…), чтобы порядок был плотным.
+    rest = list(db.execute(
+        select(m.TrackStep).where(m.TrackStep.track_id == track_id)
+        .order_by(m.TrackStep.ordinal)).scalars().all())
+    for i, st in enumerate(rest):
+        st.ordinal = i
+    db.commit()
+
+
+def autobuild_track(db: Session, company_id: str, *,
+                    title: str = "Онбординг новичка",
+                    description: str = "Курс из ваших опубликованных стандартов.",
+                    require_quiz: bool = True, pass_score: float = 0.8,
+                    num_questions: int = 5,
+                    created_by: Optional[str] = None) -> m.Track:
+    """Собрать черновик трека из ВСЕХ опубликованных стандартов компании.
+
+    Каждый опубликованный документ становится шагом (в порядке загрузки). Трек
+    создаётся как черновик (TRACK_DRAFT): руководитель может убрать лишние шаги
+    и затем опубликовать. Если опубликованных документов нет — ValueError."""
+    docs = list(db.execute(
+        select(m.Document)
+        .where(m.Document.company_id == company_id)
+        .where(m.Document.status == m.DOC_PUBLISHED)
+        .order_by(m.Document.created_at)).scalars().all())
+    if not docs:
+        raise ValueError("Нет опубликованных стандартов для сборки курса")
+
+    track = create_track(db, company_id, title=title,
+                         description=description, created_by=created_by)
+    for doc in docs:
+        add_step(db, company_id, track.id, document_id=doc.id,
+                 title=doc.title, require_quiz=require_quiz,
+                 pass_score=pass_score, num_questions=num_questions)
+    db.refresh(track)
+    return track
+
+
 # --------------------------- Зачисление и прогресс ---------------------------
 
 def _ensure_progress(db: Session, enrollment: m.Enrollment,
@@ -182,13 +229,14 @@ def _recompute_enrollment(db: Session, enrollment: m.Enrollment,
 
 def submit_step(db: Session, company_id: str, user_id: str, *,
                 enrollment_id: str, step_id: str,
-                quiz: Optional[List[dict]] = None,
+                quiz_token: Optional[str] = None,
                 answers: Optional[List[int]] = None) -> dict:
     """Зафиксировать прохождение шага текущим сотрудником.
 
-    Для шага с тестом (require_quiz) обязательны quiz+answers — балл считается
-    серверно через onboarding.grade, шаг пройден при score ≥ pass_score. Для шага
-    без теста (ознакомление) — засчитывается сразу.
+    Для шага с тестом (require_quiz) обязательны quiz_token+answers — сервер
+    достаёт сохранённый тест по токену и грейдит ответы против СВОЕЙ копии
+    (правильные ответы клиенту не отдаются), шаг пройден при score ≥ pass_score.
+    Для шага без теста (ознакомление) — засчитывается сразу.
 
     Возвращает {step_status, score, enrollment_status, grade?}.
     """
@@ -213,9 +261,16 @@ def submit_step(db: Session, company_id: str, user_id: str, *,
 
     grade_result = None
     if step.require_quiz:
-        if not quiz:
-            raise ValueError("Для шага с тестом нужны quiz и answers")
-        grade_result = onboarding.grade(quiz, answers or [])
+        if not quiz_token:
+            raise ValueError("Для шага с тестом нужны quiz_token и answers")
+        try:
+            quiz_inst = onboarding.load_quiz(db, company_id, quiz_token)
+        except KeyError:
+            raise ValueError("Тест не найден")
+        # Тест должен быть сгенерирован по стандарту именно этого шага.
+        if quiz_inst.document_id != step.document_id:
+            raise ValueError("Тест не относится к этому шагу")
+        grade_result = onboarding.grade(quiz_inst.questions, answers or [])
         score = grade_result["score"]
         passed = score >= step.pass_score
     else:

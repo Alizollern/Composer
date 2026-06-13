@@ -78,20 +78,32 @@ class GeminiEmbedder(Embedder):
     """Прод-эмбеддер на бесплатных эмбеддингах Google AI Studio.
 
     Использует тот же SDK google-genai, что и LLM-провайдер. Ключ — из
-    GEMINI_API_KEY/GOOGLE_API_KEY. Размерность задаётся моделью (text-embedding-004
-    → 768). Векторы L2-нормируем для устойчивого косинуса.
+    GEMINI_API_KEY/GOOGLE_API_KEY.
+
+    Модель по умолчанию — `gemini-embedding-001` (актуальная в API v1beta; старая
+    `text-embedding-004` для новых ключей уже отдаёт 404). У этой модели размерность
+    настраиваемая, поэтому мы явно запрашиваем output_dimensionality = self.dim,
+    чтобы вектор совпадал с размером pgvector-колонки (EVERGREEN_EMBEDDING_DIM).
+    При размерности ≠ 3072 Google не нормирует вектор сам — нормируем L2 здесь.
     """
 
-    def __init__(self, model: str | None = None, dim: int = 768):
+    def __init__(self, model: str | None = None, dim: int | None = None):
         from google import genai  # импорт ленивый: офлайн без пакета не падаем
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         self.client = genai.Client(api_key=key) if key else genai.Client()
         self.model = model or os.environ.get(
-            "EVERGREEN_EMBEDDING_MODEL", "text-embedding-004")
+            "EVERGREEN_EMBEDDING_MODEL", "gemini-embedding-001")
+        # Размер берём из конфига, чтобы он совпадал с pgvector-колонкой.
+        if dim is None:
+            from product.config import EMBEDDING_DIM
+            dim = EMBEDDING_DIM
         self.dim = dim
 
     def embed(self, texts: List[str]) -> List[List[float]]:
-        resp = self.client.models.embed_content(model=self.model, contents=texts)
+        from google.genai import types
+        resp = self.client.models.embed_content(
+            model=self.model, contents=texts,
+            config=types.EmbedContentConfig(output_dimensionality=self.dim))
         vecs = [list(e.values) for e in resp.embeddings]
         return [_l2_normalize(v) for v in vecs]
 

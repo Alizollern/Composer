@@ -49,6 +49,9 @@ services:
       # Чтобы переключиться на MinIO (профиль s3 ниже): EVERGREEN_STORAGE_BACKEND=s3.
       - EVERGREEN_STORAGE_BACKEND=${EVERGREEN_STORAGE_BACKEND:-local}
       - EVERGREEN_STORAGE_DIR=/app/var/storage
+      # Журнал «мыслей» агента — кладём в примонтированную папку, чтобы читать
+      # его на хосте (tail -f var/logs/agent.jsonl) и контролировать ИИ.
+      - EVERGREEN_AGENT_LOG=/app/var/logs/agent.jsonl
       - EVERGREEN_S3_ENDPOINT=${EVERGREEN_S3_ENDPOINT:-http://minio:9000}
       - EVERGREEN_S3_BUCKET=${EVERGREEN_S3_BUCKET:-evergreen-docs}
       - EVERGREEN_S3_ACCESS_KEY=${EVERGREEN_S3_ACCESS_KEY:-evergreen}
@@ -61,6 +64,8 @@ services:
       - ./agents:/app/agents
       - ./workspace:/app/workspace
       - ./knowledge:/app/knowledge
+      # Журнал агента — bind-mount на хост, чтобы руководитель видел его вживую.
+      - ./var/logs:/app/var/logs
       # Оригиналы документов (local-хранилище) — в именованном томе, переживают пересборку.
       - storagedata:/app/var/storage
     restart: unless-stopped

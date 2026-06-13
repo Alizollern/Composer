@@ -23,6 +23,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from product import brain
+from product.agent_log import log_event
 from product.db import models as m
 from product.rag import get_embedder, search_chunks
 from product.rag.embedder import Embedder
@@ -128,8 +129,18 @@ def answer_question(
                          allowed_document_ids=allowed_ids)
     best_score = hits[0].score if hits else 0.0
 
+    # В журнал агента: что нашёл ретривал (для контроля «на чём думает» бот).
+    log_event(
+        "chat.retrieval", company=company_id, question=question,
+        best_score=round(best_score, 4), min_score=min_score,
+        candidates=[{"title": h.document_title, "score": round(h.score, 4)}
+                    for h in hits],
+    )
+
     # Рубеж 1 — retrieval-гейт: ничего релевантного не нашли.
     if not hits or best_score < min_score:
+        log_event("chat.decision", company=company_id, question=question,
+                  decision="refused", gate="retrieval", best_score=round(best_score, 4))
         gap = _log_gap(db, company_id, user_id, question, best_score)
         _save_turn(db, company_id, user_id, question, REFUSAL_TEXT, [])
         db.commit()
@@ -142,9 +153,12 @@ def answer_question(
         f"Фрагменты стандартов:\n\n{context}\n\n"
         f"Вопрос сотрудника: {question}"
     )
-    raw = brain.complete(_SYSTEM, user_prompt, llm=llm).strip()
+    raw = brain.complete(_SYSTEM, user_prompt, llm=llm,
+                         operation="chat_strict_rag", company=company_id).strip()
 
     if REFUSAL_MARKER in raw or not raw:
+        log_event("chat.decision", company=company_id, question=question,
+                  decision="refused", gate="generation", best_score=round(best_score, 4))
         gap = _log_gap(db, company_id, user_id, question, best_score)
         _save_turn(db, company_id, user_id, question, REFUSAL_TEXT, [])
         db.commit()
@@ -152,6 +166,9 @@ def answer_question(
                 "gap_id": gap.id, "best_score": best_score}
 
     sources = _dedup_sources(hits)
+    log_event("chat.decision", company=company_id, question=question,
+              decision="answered", gate="generation", best_score=round(best_score, 4),
+              sources=[src["document_title"] for src in sources])
     _save_turn(db, company_id, user_id, question, raw, sources)
     db.commit()
     return {"answer": raw, "refused": False, "sources": sources,

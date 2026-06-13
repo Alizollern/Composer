@@ -317,6 +317,29 @@ class StepProgress(Base):
         DateTime(timezone=True), default=_now, onupdate=_now)
 
 
+class QuizInstance(Base):
+    """Сгенерированный тест, сохранённый на сервере.
+
+    Вопросы вместе с верными ответами (correct_index) и цитатами (source_quote)
+    живут ТОЛЬКО здесь. Клиенту при выдаче теста отдаются вопросы без этих полей,
+    а при сдаче сервер грейдит ответы против этой серверной копии — поэтому
+    правильные ответы не покидают бэкенд до момента проверки (нельзя подсмотреть).
+    """
+
+    __tablename__ = "quiz_instances"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Полный список вопросов: [{question, options, correct_index, source_quote}].
+    questions: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class ChatMessage(Base):
     """История диалога сотрудника с ботом. sources — на какие чанки сослался ответ."""
 

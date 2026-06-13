@@ -64,13 +64,16 @@ def test_build_publish_enroll_and_pass_track(client):
     step_id = mine[0]["steps"][0]["id"]
     assert mine[0]["steps"][0]["progress"]["status"] == "pending"
 
-    # генерируем тест по документу шага и сдаём верно
-    quiz = client.post(f"/api/documents/{doc['id']}/quiz", headers=_auth(owner),
-                       json={"num_questions": 1}).json()["questions"]
-    answers = [quiz[0]["correct_index"]]
+    # генерируем тест по документу шага и сдаём верно (ответы — по токену,
+    # верный вариант узнаём из разбора, а не из выдачи теста)
+    token = client.post(f"/api/documents/{doc['id']}/quiz", headers=_auth(owner),
+                        json={"num_questions": 1}).json()["quiz_token"]
+    probe = client.post("/api/quiz/grade", headers=_auth(owner),
+                        json={"quiz_token": token, "answers": [0]}).json()
+    answers = [probe["details"][0]["correct_index"]]
     sub = client.post(
         f"/api/enrollments/{enrollment_id}/steps/{step_id}/submit",
-        headers=_auth(emp_tok), json={"quiz": quiz, "answers": answers})
+        headers=_auth(emp_tok), json={"quiz_token": token, "answers": answers})
     assert sub.status_code == 200, sub.text
     body = sub.json()
     assert body["step_status"] == "passed"
@@ -96,12 +99,14 @@ def test_failing_quiz_keeps_step_pending(client):
                       json={"user_id": emp_id}).json()
     mine = client.get("/api/my/enrollments", headers=_auth(emp_tok)).json()
     step_id = mine[0]["steps"][0]["id"]
-    quiz = client.post(f"/api/documents/{doc['id']}/quiz", headers=_auth(owner),
-                       json={"num_questions": 1}).json()["questions"]
-    wrong = [(quiz[0]["correct_index"] + 1) % 4]
+    token = client.post(f"/api/documents/{doc['id']}/quiz", headers=_auth(owner),
+                        json={"num_questions": 1}).json()["quiz_token"]
+    probe = client.post("/api/quiz/grade", headers=_auth(owner),
+                        json={"quiz_token": token, "answers": [0]}).json()
+    wrong = [(probe["details"][0]["correct_index"] + 1) % 4]
     sub = client.post(
         f"/api/enrollments/{enr['id']}/steps/{step_id}/submit",
-        headers=_auth(emp_tok), json={"quiz": quiz, "answers": wrong}).json()
+        headers=_auth(emp_tok), json={"quiz_token": token, "answers": wrong}).json()
     assert sub["step_status"] == "pending"
     assert sub["enrollment_status"] == "active"
 

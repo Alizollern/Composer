@@ -87,6 +87,13 @@ class DocumentOut(BaseModel):
     point_id: Optional[str] = None
 
 
+class DocumentContentOut(BaseModel):
+    id: str
+    title: str
+    category: str
+    content: str
+
+
 # ---- Chat (M2) ----
 class ChatIn(BaseModel):
     question: str
@@ -119,19 +126,21 @@ class QuizGenIn(BaseModel):
 
 
 class QuizQuestionOut(BaseModel):
+    # Публичный вид вопроса для клиента: БЕЗ correct_index/source_quote —
+    # правильные ответы хранятся на сервере и не уходят в браузер до сдачи.
     question: str
     options: List[str]
-    correct_index: int
-    source_quote: str = ""
 
 
 class QuizOut(BaseModel):
     document_id: str
+    # Токен теста (id серверной копии): по нему сдают ответы на проверку.
+    quiz_token: str
     questions: List[QuizQuestionOut]
 
 
 class GradeIn(BaseModel):
-    quiz: List[QuizQuestionOut]
+    quiz_token: str
     answers: List[int]
 
 
@@ -155,6 +164,14 @@ class GradeOut(BaseModel):
 class TrackIn(BaseModel):
     title: str
     description: str = ""
+
+
+class TrackAutoBuildIn(BaseModel):
+    title: str = "Онбординг новичка"
+    description: str = "Курс из ваших опубликованных стандартов."
+    require_quiz: bool = True
+    pass_score: float = 0.8
+    num_questions: int = 5
 
 
 class TrackOut(BaseModel):
@@ -220,7 +237,9 @@ class MyEnrollmentOut(BaseModel):
 
 
 class SubmitStepIn(BaseModel):
-    quiz: Optional[List[QuizQuestionOut]] = None
+    # Шаг с тестом сдают по токену теста + выбранным ответам; сервер грейдит
+    # против своей копии. Шаг без теста — оба поля пустые.
+    quiz_token: Optional[str] = None
     answers: Optional[List[int]] = None
 
 

@@ -50,6 +50,11 @@ async function j(path, opts = {}) {
     return response.blob();
   }
 
+  // 204 No Content (например, удаление) — тела нет, JSON парсить нечего.
+  if (response.status === 204) {
+    return null;
+  }
+
   return response.json();
 }
 
@@ -66,6 +71,7 @@ export const api = {
   // --- Users ---
   users: {
     create: (data) => j("/api/users", { method: "POST", body: JSON.stringify(data) }),
+    list: () => j("/api/users"),
   },
 
   // --- Documents (Knowledge Base) ---
@@ -75,6 +81,7 @@ export const api = {
       return j(`/api/documents${qs}`);
     },
     get: (id) => j(`/api/documents/${id}`),
+    getContent: (id) => j(`/api/documents/${id}/content`),
     create: (data) => j("/api/documents", { method: "POST", body: JSON.stringify(data) }),
     upload: (file, category) => {
       const formData = new FormData();
@@ -106,15 +113,17 @@ export const api = {
   // --- Quiz ---
   quiz: {
     generate: (id, num_questions = 5) => j(`/api/documents/${id}/quiz`, { method: "POST", body: JSON.stringify({ num_questions }) }),
-    grade: (quiz, answers) => j("/api/quiz/grade", { method: "POST", body: JSON.stringify({ quiz, answers }) }),
+    grade: (quiz_token, answers) => j("/api/quiz/grade", { method: "POST", body: JSON.stringify({ quiz_token, answers }) }),
   },
 
   // --- Tracks (Onboarding) ---
   tracks: {
     create: (data) => j("/api/tracks", { method: "POST", body: JSON.stringify(data) }),
+    autoBuild: (data = {}) => j("/api/tracks/auto", { method: "POST", body: JSON.stringify(data) }),
     list: () => j("/api/tracks"),
     get: (id) => j(`/api/tracks/${id}`),
     addStep: (id, data) => j(`/api/tracks/${id}/steps`, { method: "POST", body: JSON.stringify(data) }),
+    deleteStep: (id, stepId) => j(`/api/tracks/${id}/steps/${stepId}`, { method: "DELETE" }),
     updateStatus: (id, status) => j(`/api/tracks/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
     enroll: (id, user_id) => j(`/api/tracks/${id}/enroll`, { method: "POST", body: JSON.stringify({ user_id }) }),
     enrollMe: (id) => j(`/api/tracks/${id}/enroll-me`, { method: "POST" }),
