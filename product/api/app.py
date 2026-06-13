@@ -27,7 +27,7 @@ from product.auth.deps import (
     require_owner, require_manager, require_employee,
 )
 from product.auth.security import create_access_token
-from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews, advisor
+from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews, advisor, digest
 from product.modules.accounts import AccountError
 from product.modules.onboarding import QuizError
 from product.auth import ROLE_EMPLOYEE
@@ -556,6 +556,13 @@ def create_app() -> FastAPI:
                 yield f"data: {_json.dumps(ev, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(gen(), media_type="text/event-stream")
+
+    @app.get("/api/digest", response_model=s.DigestOut)
+    def digest_get(principal: Principal = Depends(require_manager),
+                   db: Session = Depends(get_db)):
+        """Сводка собственнику: пульс сети, тревоги по проседающим точкам и
+        короткий брифинг. Цифры считаются детерминированно; текст — поверх них."""
+        return digest.build_digest(db, principal.company_id)
 
     # ---------------------- Фронтенд (SPA) ----------------------
     # Docker-образ кладёт собранный фронт в frontend/dist. Отдаём его прямо из

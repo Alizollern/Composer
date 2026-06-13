@@ -142,6 +142,11 @@ export const api = {
     },
   },
 
+  // --- Сводка и тревоги собственнику ---
+  digest: {
+    get: () => j("/api/digest"),
+  },
+
   // --- Цифровой опер-дир (агент с инструментами) ---
   advisor: {
     ask: (question) => j("/api/advisor", { method: "POST", body: JSON.stringify({ question }) }),

@@ -427,3 +427,23 @@ def test_advisor_stream_emits_thoughts_and_final(client, monkeypatch):
     assert "tool_call" in types
     finals = [e for e in events if e["type"] == "final"]
     assert finals and "штатно" in finals[0]["answer"]
+
+
+def test_digest_endpoint_empty(client):
+    """Сводка отдаётся даже без отзывов — пустая, без тревог."""
+    owner = _register(client)["access_token"]
+    r = client.get("/api/digest", headers=_auth(owner))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["has_data"] is False
+    assert body["alerts"] == []
+    assert body["summary"]
+
+
+def test_employee_cannot_access_digest(client):
+    owner = _register(client)["access_token"]
+    client.post("/api/users", headers=_auth(owner), json={
+        "email": "e3@acme.io", "password": "secret1", "role": "employee"})
+    emp = client.post("/api/auth/login", json={
+        "slug": "acme", "email": "e3@acme.io", "password": "secret1"}).json()["access_token"]
+    assert client.get("/api/digest", headers=_auth(emp)).status_code == 403

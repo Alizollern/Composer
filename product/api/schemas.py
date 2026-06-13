@@ -330,3 +330,23 @@ class AdvisorIn(BaseModel):
 
 class AdvisorOut(BaseModel):
     answer: str
+
+
+# ---- Сводка и тревоги собственнику ----
+class AlertOut(BaseModel):
+    severity: str
+    point_id: Optional[str] = None
+    point_name: str = ""
+    kind: str = ""
+    message: str = ""
+    metric: float = 0.0
+
+
+class DigestOut(BaseModel):
+    generated_at: str
+    pulse: PulseOut
+    alerts: List[AlertOut] = []
+    points: List[PointOut] = []
+    top_problems: List[ProblemOut] = []
+    summary: str = ""
+    has_data: bool = False
