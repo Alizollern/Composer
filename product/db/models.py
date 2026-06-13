@@ -96,6 +96,13 @@ class Point(Base):
         ForeignKey("companies.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(255))
     address: Mapped[str] = mapped_column(String(512), default="")
+    # Привязка к внешнему источнику отзывов (цифровой опер-дир, M4).
+    #   source       — "2gis" | "" (откуда тянем отзывы точки);
+    #   external_id  — id филиала во внешнем источнике (для запроса отзывов);
+    #   external_url — ссылка, которую владелец вставил (для удобства/повтора).
+    source: Mapped[str] = mapped_column(String(32), default="")
+    external_id: Mapped[str] = mapped_column(String(128), default="", index=True)
+    external_url: Mapped[str] = mapped_column(String(1024), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     company: Mapped[Company] = relationship(back_populates="points")
@@ -338,6 +345,58 @@ class QuizInstance(Base):
     # Полный список вопросов: [{question, options, correct_index, source_quote}].
     questions: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+# Источники отзывов и тональность (M4 — «цифровой опер-дир»).
+REVIEW_2GIS = "2gis"
+SENTIMENT_POSITIVE = "positive"
+SENTIMENT_NEUTRAL = "neutral"
+SENTIMENT_NEGATIVE = "negative"
+
+
+class Review(Base):
+    """Отзыв клиента о точке сети (из 2GIS и др.) + результат AI-разбора.
+
+    Это «уши» цифрового опер-дира: система читает, что клиенты пишут о точке, и
+    сопоставляет жалобы с внутренними стандартами — где реальность расходится с
+    регламентом. Разбор хранится прямо в строке отзыва (денормализованно) — так
+    проще и быстрее строить командный центр собственника.
+
+    Поля разбора заполняются позже (analyzed=False → True): тональность, тема,
+    признак жалобы, привязанный стандарт (matched_document_*) и рекомендация.
+    """
+
+    __tablename__ = "reviews"
+    __table_args__ = (
+        UniqueConstraint("company_id", "source", "external_id",
+                         name="uq_review_company_source_ext"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    point_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("points.id", ondelete="SET NULL"), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(32), default=REVIEW_2GIS)
+    # id отзыва во внешнем источнике — чтобы не дублировать при повторной синхронизации.
+    external_id: Mapped[str] = mapped_column(String(128), default="")
+    author: Mapped[str] = mapped_column(String(255), default="")
+    rating: Mapped[int] = mapped_column(Integer, default=0)  # 1..5 (0 — неизвестно)
+    text: Mapped[str] = mapped_column(Text, default="")
+    dated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True)  # когда отзыв оставлен в источнике
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    # --- Результат AI-разбора ---
+    analyzed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    sentiment: Mapped[str] = mapped_column(String(16), default="")
+    topic: Mapped[str] = mapped_column(String(255), default="")
+    is_complaint: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Стандарт, которого касается жалоба (если нашёлся релевантный).
+    matched_document_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
+    matched_document_title: Mapped[str] = mapped_column(String(512), default="")
+    matched_quote: Mapped[str] = mapped_column(Text, default="")
+    recommendation: Mapped[str] = mapped_column(Text, default="")
 
 
 class ChatMessage(Base):

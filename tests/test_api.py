@@ -255,3 +255,63 @@ def test_autobuild_requires_published_docs(client):
     # Без опубликованных стандартов — понятная ошибка 400, а не пустой курс.
     r = client.post("/api/tracks/auto", headers=_auth(owner), json={})
     assert r.status_code == 400
+
+
+# ---- M4: Командный центр (отзывы 2GIS → инсайты) ----
+
+def _publish_doc(client, owner, title, content, category=""):
+    r = client.post("/api/documents", headers=_auth(owner), json={
+        "title": title, "content": content, "category": category, "publish": True})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def test_command_center_reviews_flow(client):
+    owner = _register(client)["access_token"]
+    _publish_doc(client, owner, "Правила уборки",
+                 "Влажная уборка зала дважды в день. Тренажёры протираются каждые 2 часа.")
+    _publish_doc(client, owner, "Стандарт обслуживания",
+                 "Сотрудник приветствует клиента в течение 30 секунд, вежливо.")
+
+    # Подключаем точку (источник в тестах — FakeReviewSource: 8 отзывов).
+    p = client.post("/api/points", headers=_auth(owner),
+                    json={"name": "Зал на Абая", "url": "https://2gis.kz/almaty/firm/70000001006012345"})
+    assert p.status_code == 201, p.text
+    point_id = p.json()["id"]
+
+    # Синхронизация: тянем + сразу разбираем.
+    sync = client.post(f"/api/points/{point_id}/sync", headers=_auth(owner)).json()
+    assert sync["added"] == 8
+    assert sync["analyzed"] == 8
+
+    # Командный центр: пульс, боли, лента.
+    cc = client.get("/api/command-center", headers=_auth(owner)).json()
+    assert cc["pulse"]["total"] == 8
+    assert cc["pulse"]["negative"] >= 1
+    assert cc["pulse"]["complaints"] >= 1
+    assert cc["pulse"]["positive"] >= 1
+    assert cc["problems"], "должны выделиться главные боли"
+    assert len(cc["recent"]) == 8
+    assert cc["points"][0]["reviews_count"] == 8
+
+    # Повторная синхронизация не плодит дубли.
+    sync2 = client.post(f"/api/points/{point_id}/sync", headers=_auth(owner)).json()
+    assert sync2["added"] == 0
+
+
+def test_connect_point_rejects_bad_url(client):
+    owner = _register(client)["access_token"]
+    r = client.post("/api/points", headers=_auth(owner),
+                    json={"name": "X", "url": "https://example.com/nope"})
+    assert r.status_code == 400
+
+
+def test_employee_cannot_access_command_center(client):
+    owner = _register(client)["access_token"]
+    client.post("/api/users", headers=_auth(owner), json={
+        "email": "w@acme.io", "password": "secret1", "role": "employee"})
+    emp = client.post("/api/auth/login", json={
+        "slug": "acme", "email": "w@acme.io", "password": "secret1"}).json()["access_token"]
+    assert client.get("/api/command-center", headers=_auth(emp)).status_code == 403
+    assert client.post("/api/points", headers=_auth(emp),
+                       json={"name": "X", "url": "123"}).status_code == 403

@@ -26,13 +26,21 @@ sys.path.insert(0, str(ROOT))
 
 from product.db.session import session_scope, get_engine, init_db  # noqa: E402
 from product.modules import accounts, knowledge as kb, tracks      # noqa: E402
+from product.modules import reviews as reviews_mod                 # noqa: E402
 from product.modules.accounts import AccountError                  # noqa: E402
+from product.reviews.source import FakeReviewSource                # noqa: E402
 
 SLUG = "bronx-fitness"
 OWNER_EMAIL = "owner@bronx.kz"
 OWNER_PASSWORD = "bronx12345"
 EMP_EMAIL = "admin@bronx.kz"
 EMP_PASSWORD = "bronx12345"
+
+# Точка сети для «Командного центра». Ссылка валидная по формату 2GIS, но отзывы
+# для демо берём из детерминированного FakeReviewSource — чтобы экран был всегда
+# наполнен независимо от сети/ключей (на проде кнопка «Обновить отзывы» тянет живые).
+POINT_NAME = "Bronx Fitness — Абая"
+POINT_URL = "https://2gis.kz/almaty/firm/70000001019283746"
 
 DOCS = [
     {
@@ -174,6 +182,17 @@ def main() -> None:
         db.commit()
         print(f"  ✅ Курс «{track.title}» опубликован и назначен")
 
+        # Командный центр: подключаем точку и наполняем её отзывами (демо-источник),
+        # затем сразу разбираем — тональность, жалобы, привязка к стандартам.
+        print("Подключаю точку и собираю «Командный центр» (отзывы → инсайты)…")
+        point = reviews_mod.connect_point(
+            db, company.id, name=POINT_NAME, url=POINT_URL)
+        db.commit()
+        result = reviews_mod.sync_and_analyze(
+            db, company.id, point.id, source=FakeReviewSource())
+        print(f"  ✅ Точка «{POINT_NAME}»: загружено {result['added']} отзывов, "
+              f"разобрано {result['analyzed']}")
+
     print("\n" + "=" * 64)
     print("  ДЕМО-КОМПАНИЯ ГОТОВА — можно показывать клиенту")
     print("=" * 64)
@@ -191,6 +210,10 @@ def main() -> None:
     print(f"   • Войди сотрудником ({EMP_EMAIL}) → раздел «Обучение» →")
     print("     пройди курс карточками со свайпом и мини-тестами.")
     print(f"   • Войди владельцем → «Обучение» → видно прогресс сотрудника.")
+    print("\n  Командный центр (для владельца/управляющего):")
+    print("   • Войди владельцем → «Командный центр» — пульс точки, главные")
+    print("     боли клиентов (жалобы, привязанные к стандартам) и лента отзывов.")
+    print("   • Кнопка «Обновить отзывы» подтягивает и разбирает новые.")
     print("=" * 64)
 
 

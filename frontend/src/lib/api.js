@@ -130,5 +130,15 @@ export const api = {
     myEnrollments: () => j("/api/my/enrollments"),
     submitStep: (enrollment_id, step_id, data) => j(`/api/enrollments/${enrollment_id}/steps/${step_id}/submit`, { method: "POST", body: JSON.stringify(data) }),
     progress: (id) => j(`/api/tracks/${id}/progress`),
-  }
+  },
+
+  // --- Командный центр (отзывы → инсайты, «цифровой опер-дир») ---
+  reviews: {
+    connectPoint: (data) => j("/api/points", { method: "POST", body: JSON.stringify(data) }),
+    sync: (point_id) => j(`/api/points/${point_id}/sync`, { method: "POST" }),
+    commandCenter: (point_id) => {
+      const qs = point_id ? `?point_id=${point_id}` : "";
+      return j(`/api/command-center${qs}`);
+    },
+  },
 };

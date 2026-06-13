@@ -23,6 +23,7 @@ import Layout from "./app/Layout.jsx";
 import Chat from "./app/Chat.jsx";
 import KnowledgeBase from "./app/KnowledgeBase.jsx";
 import Learning from "./app/Learning.jsx";
+import CommandCenter from "./app/CommandCenter.jsx";
 import AssistantLog from "./app/AssistantLog.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -56,6 +57,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
               <Route path="chat" element={<Chat />} />
               <Route path="knowledge" element={<KnowledgeBase />} />
               <Route path="learning" element={<Learning />} />
+              <Route path="command-center" element={<CommandCenter />} />
               <Route path="assistant-log" element={<AssistantLog />} />
             </Route>
 

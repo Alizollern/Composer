@@ -257,3 +257,64 @@ class TrackProgressRowOut(BaseModel):
     status: str
     passed_steps: int
     total_steps: int
+
+
+# ---- M4: Командный центр (отзывы → инсайты) ----
+class ConnectPointIn(BaseModel):
+    name: str
+    url: str  # ссылка на точку в 2GIS (или числовой id филиала)
+    source: str = "2gis"
+
+
+class PointOut(BaseModel):
+    id: str
+    name: str
+    source: str = ""
+    external_url: str = ""
+    reviews_count: int = 0
+    negative_count: int = 0
+
+
+class SyncReviewsOut(BaseModel):
+    added: int
+    analyzed: int
+
+
+class PulseOut(BaseModel):
+    total: int
+    analyzed: int
+    avg_rating: float
+    positive: int
+    neutral: int
+    negative: int
+    complaints: int
+
+
+class ProblemOut(BaseModel):
+    title: str
+    document_id: Optional[str] = None
+    count: int
+    recommendation: str = ""
+    standard_quote: str = ""
+    samples: List[str] = []
+
+
+class ReviewOut(BaseModel):
+    id: str
+    author: str = ""
+    rating: int = 0
+    text: str = ""
+    dated_at: Optional[str] = None
+    sentiment: str = ""
+    topic: str = ""
+    is_complaint: bool = False
+    matched_document_title: str = ""
+    recommendation: str = ""
+
+
+class CommandCenterOut(BaseModel):
+    points: List[PointOut] = []
+    selected_point_id: Optional[str] = None
+    pulse: PulseOut
+    problems: List[ProblemOut] = []
+    recent: List[ReviewOut] = []

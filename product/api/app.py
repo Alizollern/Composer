@@ -27,7 +27,7 @@ from product.auth.deps import (
     require_owner, require_manager, require_employee,
 )
 from product.auth.security import create_access_token
-from product.modules import accounts, knowledge as kb, chat, onboarding, tracks
+from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews
 from product.modules.accounts import AccountError
 from product.modules.onboarding import QuizError
 from product.auth import ROLE_EMPLOYEE
@@ -471,6 +471,38 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
+
+    # ------------- M4: Командный центр (отзывы → инсайты) -------------
+    # «Цифровой опер-дир»: владелец подключает точку (ссылка 2GIS), система тянет
+    # отзывы, AI сопоставляет жалобы со стандартами и выдаёт сводку собственнику.
+    @app.post("/api/points", response_model=s.PointOut, status_code=201)
+    def connect_point(body: s.ConnectPointIn,
+                      principal: Principal = Depends(require_manager),
+                      db: Session = Depends(get_db)):
+        try:
+            point = reviews.connect_point(
+                db, principal.company_id, name=body.name, url=body.url,
+                source=body.source)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        return s.PointOut(id=point.id, name=point.name, source=point.source,
+                          external_url=point.external_url)
+
+    @app.post("/api/points/{point_id}/sync", response_model=s.SyncReviewsOut)
+    def sync_point_reviews(point_id: str,
+                           principal: Principal = Depends(require_manager),
+                           db: Session = Depends(get_db)):
+        try:
+            res = reviews.sync_and_analyze(db, principal.company_id, point_id)
+        except KeyError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Точка не найдена")
+        return s.SyncReviewsOut(**res)
+
+    @app.get("/api/command-center", response_model=s.CommandCenterOut)
+    def command_center(point_id: Optional[str] = None,
+                       principal: Principal = Depends(require_manager),
+                       db: Session = Depends(get_db)):
+        return reviews.command_center(db, principal.company_id, point_id=point_id)
 
     # ---------------------- Фронтенд (SPA) ----------------------
     # Docker-образ кладёт собранный фронт в frontend/dist. Отдаём его прямо из

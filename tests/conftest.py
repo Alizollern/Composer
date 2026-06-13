@@ -75,11 +75,28 @@ _FAKE_QUIZ_JSON = (
 def _fake_complete(system, user, *, llm=None, **_):
     """Детерминированная замена LLM:
       * запрос на генерацию теста (M3) — возвращает валидный JSON-массив;
+      * запрос разбора отзыва (M4) — JSON-объект (тональность/жалоба по оценке);
       * запрос чат-бота (M2) с фрагментами — ответ со ссылкой;
       * иначе — маркер отказа (для негативных тестов; обычно retrieval-гейт
         срабатывает раньше и сюда не доходит)."""
     if "проверочный тест" in system:
         return _FAKE_QUIZ_JSON
+    if "операционный директор" in system:
+        import json as _json
+        import re as _re
+        mm = _re.search(r"Оценка клиента: (\d)", user)
+        rating = int(mm.group(1)) if mm else 0
+        if rating >= 4:
+            sentiment, complaint = "positive", False
+        elif rating == 3:
+            sentiment, complaint = "neutral", False
+        else:
+            sentiment, complaint = "negative", True
+        return _json.dumps({
+            "sentiment": sentiment, "topic": "Тест",
+            "is_complaint": complaint,
+            "recommendation": "Устранить причину жалобы" if complaint else "",
+        }, ensure_ascii=False)
     if "Фрагмент 1" in user:
         return "Согласно стандартам компании, ответ найден. Источник: «стандарт»."
     return chat_module.REFUSAL_MARKER
