@@ -154,6 +154,20 @@ export const api = {
     resolveGap: (gapId) => j(`/api/gaps/${gapId}/resolve`, { method: "POST" }),
   },
 
+  // --- Отслеживание исправлений (задачи) ---
+  actions: {
+    list: (status_filter, point_id) => {
+      const qs = new URLSearchParams();
+      if (status_filter) qs.set("status_filter", status_filter);
+      if (point_id) qs.set("point_id", point_id);
+      const s = qs.toString();
+      return j(`/api/actions${s ? "?" + s : ""}`);
+    },
+    create: (data) => j("/api/actions", { method: "POST", body: JSON.stringify(data) }),
+    setStatus: (id, status) => j(`/api/actions/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+    remove: (id) => j(`/api/actions/${id}`, { method: "DELETE" }),
+  },
+
   // --- Цифровой опер-дир (агент с инструментами) ---
   advisor: {
     ask: (question) => j("/api/advisor", { method: "POST", body: JSON.stringify({ question }) }),

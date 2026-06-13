@@ -27,7 +27,7 @@ from product.auth.deps import (
     require_owner, require_manager, require_employee,
 )
 from product.auth.security import create_access_token
-from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews, advisor, digest, coauthor
+from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews, advisor, digest, coauthor, actions
 from product.modules.accounts import AccountError
 from product.modules.onboarding import QuizError
 from product.auth import ROLE_EMPLOYEE
@@ -595,6 +595,67 @@ def create_app() -> FastAPI:
         except KeyError:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Пробел не найден")
         return s.ResolveGapOut(ok=True)
+
+    # ---------------------- Отслеживание исправлений (задачи) ----------------------
+    def _action_out(item, point_names: dict) -> s.ActionOut:
+        return s.ActionOut(
+            id=item.id, point_id=item.point_id,
+            point_name=point_names.get(item.point_id, "") if item.point_id else "",
+            title=item.title, detail=item.detail, status=item.status,
+            source=item.source,
+            created_at=item.created_at.isoformat() if item.created_at else "",
+            done_at=item.done_at.isoformat() if item.done_at else None)
+
+    @app.get("/api/actions", response_model=s.ActionListOut)
+    def actions_list(status_filter: str = "", point_id: str = "",
+                     principal: Principal = Depends(require_manager),
+                     db: Session = Depends(get_db)):
+        """Задачи на исправление компании + сводка по статусам."""
+        items = actions.list_actions(db, principal.company_id,
+                                     status=status_filter or None,
+                                     point_id=point_id or None)
+        names = {p.id: p.name for p in reviews.list_points(db, principal.company_id)}
+        return s.ActionListOut(
+            items=[_action_out(i, names) for i in items],
+            counts=actions.counts_by_status(db, principal.company_id))
+
+    @app.post("/api/actions", response_model=s.ActionOut, status_code=201)
+    def actions_create(body: s.ActionCreateIn,
+                       principal: Principal = Depends(require_manager),
+                       db: Session = Depends(get_db)):
+        """Поручить исправление (вручную или из тревоги/боли/пробела)."""
+        try:
+            item = actions.create_action(
+                db, principal.company_id, title=body.title, detail=body.detail,
+                point_id=body.point_id or None, source=body.source,
+                created_by=principal.user_id)
+        except actions.ActionError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        names = {p.id: p.name for p in reviews.list_points(db, principal.company_id)}
+        return _action_out(item, names)
+
+    @app.post("/api/actions/{action_id}/status", response_model=s.ActionOut)
+    def actions_set_status(action_id: str, body: s.ActionStatusIn,
+                           principal: Principal = Depends(require_manager),
+                           db: Session = Depends(get_db)):
+        """Сменить статус: open → in_progress → done (и проверить, что закрыто)."""
+        try:
+            item = actions.set_status(db, principal.company_id, action_id, body.status)
+        except actions.ActionError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        except KeyError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Задача не найдена")
+        names = {p.id: p.name for p in reviews.list_points(db, principal.company_id)}
+        return _action_out(item, names)
+
+    @app.delete("/api/actions/{action_id}", status_code=204)
+    def actions_delete(action_id: str,
+                       principal: Principal = Depends(require_manager),
+                       db: Session = Depends(get_db)):
+        try:
+            actions.delete_action(db, principal.company_id, action_id)
+        except KeyError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Задача не найдена")
 
     # ---------------------- Фронтенд (SPA) ----------------------
     # Docker-образ кладёт собранный фронт в frontend/dist. Отдаём его прямо из

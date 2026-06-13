@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
-import { Bell, AlertTriangle, AlertOctagon, Loader2, RefreshCw, Star, TrendingUp, ChevronRight, FileText } from "lucide-react";
+import { Bell, AlertTriangle, AlertOctagon, Loader2, RefreshCw, Star, TrendingUp, ChevronRight, FileText, Check, Plus } from "lucide-react";
 
 // Сводка собственнику: продукт сам докладывает, где болит. Цифры считаются на
 // бэке детерминированно, текст — короткий брифинг поверх них.
@@ -102,7 +102,7 @@ export default function Digest() {
               </div>
             ) : (
               <div className="space-y-2">
-                {alerts.map((a, i) => <AlertCard key={i} alert={a} onOpen={() => navigate("/app/command-center")} />)}
+                {alerts.map((a, i) => <AlertCard key={i} alert={a} navigate={navigate} />)}
               </div>
             )}
           </div>
@@ -177,17 +177,48 @@ function Stat({ label, value, icon, tone }) {
   );
 }
 
-function AlertCard({ alert, onOpen }) {
+function AlertCard({ alert, navigate }) {
   const high = alert.severity === "high";
+  const [assigned, setAssigned] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function assign(e) {
+    e.stopPropagation();
+    if (busy || assigned) return;
+    setBusy(true);
+    try {
+      await api.actions.create({
+        title: alert.message,
+        point_id: alert.point_id || null,
+        source: "alert",
+      });
+      setAssigned(true);
+    } catch (_) {
+      // тихо — пользователь увидит в разделе «Исправления»
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <button onClick={onOpen}
-      className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-colors ${
-        high ? "bg-red-50 border-red-200 hover:bg-red-100" : "bg-amber-50 border-amber-200 hover:bg-amber-100"
-      }`}>
+    <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${
+      high ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"
+    }`}>
       <span className={`mt-0.5 ${high ? "text-red-600" : "text-amber-600"}`}>
         {high ? <AlertOctagon size={18} /> : <AlertTriangle size={18} />}
       </span>
-      <span className={`text-sm ${high ? "text-red-800" : "text-amber-800"}`}>{alert.message}</span>
-    </button>
+      <span className={`text-sm flex-1 ${high ? "text-red-800" : "text-amber-800"}`}>{alert.message}</span>
+      {assigned ? (
+        <button onClick={() => navigate("/app/actions")}
+          className="text-xs flex items-center gap-1 text-green-700 flex-shrink-0">
+          <Check size={14} /> Поручено
+        </button>
+      ) : (
+        <button onClick={assign} disabled={busy}
+          className="text-xs flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 hover:border-brand-400 text-slate-700 flex-shrink-0 transition-colors">
+          {busy ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Поручить
+        </button>
+      )}
+    </div>
   );
 }

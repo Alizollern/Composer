@@ -413,3 +413,38 @@ class ChatMessage(Base):
     content: Mapped[str] = mapped_column(Text)
     sources: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+# Статусы задачи на исправление: открыта → в работе → сделана.
+ACTION_OPEN = "open"
+ACTION_IN_PROGRESS = "in_progress"
+ACTION_DONE = "done"
+
+
+class ActionItem(Base):
+    """Задача на исправление — петля «нашли проблему → поручили → проверили».
+
+    Собственник (или опер-дир) превращает боль из Командного центра/Сводки в
+    конкретное поручение управляющему точки и отслеживает, что оно реально
+    закрыто. Это «руки» цифрового опер-дира: не только увидеть проблему, но и
+    довести её до исправления.
+
+    source — откуда пришла задача: "manual" | "alert" | "problem" | "gap" —
+    чтобы видеть, что именно породило поручение."""
+
+    __tablename__ = "action_items"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    point_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("points.id", ondelete="SET NULL"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    detail: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default=ACTION_OPEN, index=True)
+    source: Mapped[str] = mapped_column(String(16), default="manual")
+    created_by: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    done_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True)

@@ -468,3 +468,44 @@ def test_employee_cannot_access_coauthor(client):
     assert client.get("/api/coauthor/suggestions", headers=_auth(emp)).status_code == 403
     assert client.post("/api/coauthor/draft", headers=_auth(emp),
                        json={"instruction": "x"}).status_code == 403
+
+
+def test_actions_crud_flow(client):
+    """Петля: создать задачу → перевести в работу → закрыть; счётчики обновляются."""
+    owner = _register(client)["access_token"]
+    # Создать
+    r = client.post("/api/actions", headers=_auth(owner),
+                    json={"title": "Протереть тренажёры", "source": "problem"})
+    assert r.status_code == 201, r.text
+    aid = r.json()["id"]
+    assert r.json()["status"] == "open"
+    # Список + счётчики
+    lst = client.get("/api/actions", headers=_auth(owner)).json()
+    assert lst["counts"]["active"] == 1 and lst["counts"]["done"] == 0
+    # В работу → done
+    r = client.post(f"/api/actions/{aid}/status", headers=_auth(owner),
+                    json={"status": "done"})
+    assert r.status_code == 200 and r.json()["done_at"]
+    lst = client.get("/api/actions", headers=_auth(owner)).json()
+    assert lst["counts"]["done"] == 1
+    # Удалить
+    assert client.delete(f"/api/actions/{aid}", headers=_auth(owner)).status_code == 204
+
+
+def test_actions_bad_status_400(client):
+    owner = _register(client)["access_token"]
+    aid = client.post("/api/actions", headers=_auth(owner),
+                      json={"title": "x"}).json()["id"]
+    assert client.post(f"/api/actions/{aid}/status", headers=_auth(owner),
+                       json={"status": "nope"}).status_code == 400
+
+
+def test_employee_cannot_access_actions(client):
+    owner = _register(client)["access_token"]
+    client.post("/api/users", headers=_auth(owner), json={
+        "email": "e5@acme.io", "password": "secret1", "role": "employee"})
+    emp = client.post("/api/auth/login", json={
+        "slug": "acme", "email": "e5@acme.io", "password": "secret1"}).json()["access_token"]
+    assert client.get("/api/actions", headers=_auth(emp)).status_code == 403
+    assert client.post("/api/actions", headers=_auth(emp),
+                       json={"title": "x"}).status_code == 403

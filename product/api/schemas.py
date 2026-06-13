@@ -377,3 +377,32 @@ class DraftStandardOut(BaseModel):
 
 class ResolveGapOut(BaseModel):
     ok: bool = True
+
+
+# ---- Отслеживание исправлений (задачи) ----
+class ActionCreateIn(BaseModel):
+    title: str
+    detail: str = ""
+    point_id: Optional[str] = None
+    source: str = "manual"
+
+
+class ActionStatusIn(BaseModel):
+    status: str
+
+
+class ActionOut(BaseModel):
+    id: str
+    point_id: Optional[str] = None
+    point_name: str = ""
+    title: str
+    detail: str = ""
+    status: str
+    source: str = "manual"
+    created_at: str
+    done_at: Optional[str] = None
+
+
+class ActionListOut(BaseModel):
+    items: List[ActionOut] = []
+    counts: dict = {}

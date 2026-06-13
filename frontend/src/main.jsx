@@ -26,6 +26,7 @@ import Learning from "./app/Learning.jsx";
 import CommandCenter from "./app/CommandCenter.jsx";
 import CoAuthor from "./app/CoAuthor.jsx";
 import Digest from "./app/Digest.jsx";
+import Actions from "./app/Actions.jsx";
 import Advisor from "./app/Advisor.jsx";
 import AssistantLog from "./app/AssistantLog.jsx";
 
@@ -63,6 +64,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
               <Route path="command-center" element={<CommandCenter />} />
               <Route path="coauthor" element={<CoAuthor />} />
               <Route path="digest" element={<Digest />} />
+              <Route path="actions" element={<Actions />} />
               <Route path="advisor" element={<Advisor />} />
               <Route path="assistant-log" element={<AssistantLog />} />
             </Route>
