@@ -14,8 +14,6 @@
 
 from __future__ import annotations
 
-import json
-import re
 from collections import defaultdict
 from typing import List, Optional
 
@@ -113,22 +111,6 @@ def sync_reviews(db: Session, company_id: str, point_id: str, *,
 
 # ------------------------------- AI-разбор -----------------------------------
 
-def _parse_obj(raw: str) -> dict:
-    """Достать JSON-объект из ответа модели (терпим к ```-обёрткам/префиксам)."""
-    text = (raw or "").strip()
-    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, flags=re.DOTALL)
-    if fence:
-        text = fence.group(1).strip()
-    if not text.startswith("{"):
-        i, j = text.find("{"), text.rfind("}")
-        if i != -1 and j != -1 and j > i:
-            text = text[i:j + 1]
-    data = json.loads(text)
-    if not isinstance(data, dict):
-        raise ValueError("ожидался JSON-объект")
-    return data
-
-
 def _sentiment_from_rating(rating: int) -> str:
     if rating >= 4:
         return m.SENTIMENT_POSITIVE
@@ -159,9 +141,9 @@ def analyze_review(text: str, rating: int, *, standard_title: str = "",
     user = (f"Оценка клиента: {rating or '—'} из 5.\n"
             f"Текст отзыва:\n{text}{ctx}")
     try:
-        raw = brain.complete(_ANALYZE_SYSTEM, user, llm=llm,
-                             operation="review_analyze", company=company)
-        data = _parse_obj(raw)
+        data = brain.complete_json(_ANALYZE_SYSTEM, user, expect="object",
+                                   llm=llm, operation="review_analyze",
+                                   company=company)
     except Exception:
         return fallback
     sentiment = str(data.get("sentiment", "")).strip().lower()
@@ -276,18 +258,30 @@ def command_center(db: Session, company_id: str, *, point_id: Optional[str] = No
                    limit_recent: int = 30) -> dict:
     """Собрать экран собственника: пульс + главные боли + лента отзывов."""
     points = list_points(db, company_id)
-    # Сводка по каждой точке (для переключателя в UI).
-    counts = defaultdict(lambda: {"total": 0, "negative": 0})
+    # Сводка по каждой точке (для переключателя и сравнения филиалов в UI).
+    counts = defaultdict(lambda: {"total": 0, "negative": 0, "positive": 0,
+                                  "complaints": 0, "rating_sum": 0, "rating_n": 0})
     for rv in _reviews_for(db, company_id, None):
         c = counts[rv.point_id]
         c["total"] += 1
         if rv.sentiment == m.SENTIMENT_NEGATIVE:
             c["negative"] += 1
+        if rv.sentiment == m.SENTIMENT_POSITIVE:
+            c["positive"] += 1
+        if rv.is_complaint:
+            c["complaints"] += 1
+        if rv.rating:
+            c["rating_sum"] += rv.rating
+            c["rating_n"] += 1
     points_out = [{
         "id": p.id, "name": p.name, "source": p.source,
         "external_url": p.external_url,
         "reviews_count": counts[p.id]["total"],
         "negative_count": counts[p.id]["negative"],
+        "positive_count": counts[p.id]["positive"],
+        "complaints_count": counts[p.id]["complaints"],
+        "avg_rating": (round(counts[p.id]["rating_sum"] / counts[p.id]["rating_n"], 2)
+                       if counts[p.id]["rating_n"] else 0.0),
     } for p in points]
 
     reviews = _reviews_for(db, company_id, point_id)

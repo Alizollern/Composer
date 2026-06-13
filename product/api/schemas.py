@@ -273,6 +273,9 @@ class PointOut(BaseModel):
     external_url: str = ""
     reviews_count: int = 0
     negative_count: int = 0
+    positive_count: int = 0
+    complaints_count: int = 0
+    avg_rating: float = 0.0
 
 
 class SyncReviewsOut(BaseModel):
@@ -318,3 +321,12 @@ class CommandCenterOut(BaseModel):
     pulse: PulseOut
     problems: List[ProblemOut] = []
     recent: List[ReviewOut] = []
+
+
+# ---- Цифровой опер-дир (агент с инструментами) ----
+class AdvisorIn(BaseModel):
+    question: str
+
+
+class AdvisorOut(BaseModel):
+    answer: str

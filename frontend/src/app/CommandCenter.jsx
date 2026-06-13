@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import {
   Gauge, RefreshCw, Plus, Loader2, Star, AlertTriangle, MessageSquareWarning,
   ThumbsUp, Link2, X, BookOpen, Lightbulb, MapPin, TrendingDown,
+  Building2, Award, ChevronRight,
 } from "lucide-react";
 
 // Командный центр CEO: подключаем точку (2GIS) → тянем отзывы → AI сопоставляет
@@ -129,6 +130,9 @@ export default function CommandCenter() {
 
       {hasData && (
         <>
+          {!selected && points.length > 1 && (
+            <NetworkOverview points={points} onPick={(id) => setSelected(id)} />
+          )}
           <PulseRow pulse={pulse} />
           <Problems problems={data.problems || []} />
           <RecentFeed recent={data.recent || []} />
@@ -162,6 +166,69 @@ function PointChip({ active, onClick, label, sub, alert }) {
       </div>
       <div className="text-xs text-slate-500 mt-0.5">{sub}</div>
     </button>
+  );
+}
+
+function NetworkOverview({ points, onPick }) {
+  // «Проблемность» точки: жалобы важнее всего, затем доля негатива, затем оценка.
+  const score = (p) => {
+    const negShare = p.reviews_count ? p.negative_count / p.reviews_count : 0;
+    return p.complaints_count * 10 + negShare * 5 - (p.avg_rating || 0);
+  };
+  const ranked = [...points].sort((a, b) => score(b) - score(a));
+  const worst = ranked[0];
+  const best = ranked[ranked.length - 1];
+
+  return (
+    <div className="mb-8">
+      <h2 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+        <Building2 size={18} className="text-brand-600" /> Сеть точек
+      </h2>
+      <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+        {ranked.map((p) => {
+          const isWorst = p.id === worst.id && p.complaints_count > 0;
+          const isBest = p.id === best.id && !isWorst && p.complaints_count === 0;
+          return (
+            <button key={p.id} onClick={() => onPick(p.id)}
+              className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-slate-50 transition-colors">
+              <span className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                isWorst ? "bg-red-100 text-red-600" : isBest ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-500"
+              }`}>
+                {isWorst ? <TrendingDown size={18} /> : isBest ? <Award size={18} /> : <MapPin size={18} />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-900 truncate">{p.name}</span>
+                  {isWorst && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">Проседает</span>}
+                  {isBest && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">Лучшая</span>}
+                </div>
+                <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                  <span className="flex items-center gap-1">
+                    <Star size={12} className="text-amber-400" fill="currentColor" />
+                    {p.avg_rating ? p.avg_rating.toFixed(1) : "—"}
+                  </span>
+                  <span>{p.reviews_count} отзывов</span>
+                  {p.complaints_count > 0 && (
+                    <span className="text-red-600 font-medium">{p.complaints_count} {plural(p.complaints_count, "жалоба", "жалобы", "жалоб")}</span>
+                  )}
+                </div>
+              </div>
+              {/* мини-бар доли негатива */}
+              <div className="hidden sm:block w-28 flex-shrink-0">
+                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-full bg-red-400 rounded-full"
+                    style={{ width: `${p.reviews_count ? Math.round((p.negative_count / p.reviews_count) * 100) : 0}%` }} />
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1 text-right">
+                  {p.reviews_count ? Math.round((p.negative_count / p.reviews_count) * 100) : 0}% негатив
+                </div>
+              </div>
+              <ChevronRight size={18} className="text-slate-300 flex-shrink-0" />
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

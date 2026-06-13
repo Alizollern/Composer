@@ -141,4 +141,57 @@ export const api = {
       return j(`/api/command-center${qs}`);
     },
   },
+
+  // --- Цифровой опер-дир (агент с инструментами) ---
+  advisor: {
+    ask: (question) => j("/api/advisor", { method: "POST", body: JSON.stringify({ question }) }),
+    // Стрим «мыслей»: onEvent({type,...}) вызывается на каждое событие агента
+    // (text, tool_call, tool_result, final, error). Возвращает промис, который
+    // резолвится по завершению потока.
+    askStream: async (question, onEvent) => {
+      const headers = new Headers({ "Content-Type": "application/json" });
+      const token = getToken();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
+      const resp = await fetch(base + "/api/advisor/stream", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ question }),
+      });
+
+      if (resp.status === 401) {
+        clearToken();
+        window.dispatchEvent(new Event("auth:unauthorized"));
+        throw new Error("Unauthorized");
+      }
+      if (!resp.ok || !resp.body) {
+        const txt = await resp.text().catch(() => "");
+        throw new Error(txt || resp.statusText || "Опер-дир недоступен");
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE-кадры разделены пустой строкой "\n\n"
+        let sep;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          const line = frame.trim();
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          try {
+            onEvent(JSON.parse(payload));
+          } catch (e) {
+            // битый кадр — пропускаем, поток продолжается
+          }
+        }
+      }
+    },
+  },
 };

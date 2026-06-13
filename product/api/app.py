@@ -27,7 +27,7 @@ from product.auth.deps import (
     require_owner, require_manager, require_employee,
 )
 from product.auth.security import create_access_token
-from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews
+from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews, advisor
 from product.modules.accounts import AccountError
 from product.modules.onboarding import QuizError
 from product.auth import ROLE_EMPLOYEE
@@ -503,6 +503,59 @@ def create_app() -> FastAPI:
                        principal: Principal = Depends(require_manager),
                        db: Session = Depends(get_db)):
         return reviews.command_center(db, principal.company_id, point_id=point_id)
+
+    @app.post("/api/advisor", response_model=s.AdvisorOut)
+    def advisor_ask(body: s.AdvisorIn,
+                    principal: Principal = Depends(require_manager),
+                    db: Session = Depends(get_db)):
+        """Цифровой опер-дир: многошаговый агент отвечает по данным компании."""
+        try:
+            res = advisor.ask(db, principal.company_id, body.question)
+        except Exception as e:  # агент не должен ронять API внутренней ошибкой
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                                f"Опер-дир временно недоступен: {e}")
+        return s.AdvisorOut(**res)
+
+    @app.post("/api/advisor/stream")
+    def advisor_stream(body: s.AdvisorIn,
+                       principal: Principal = Depends(require_manager),
+                       db: Session = Depends(get_db)):
+        """Тот же опер-дир, но СО СТРИМОМ «мыслей»: фронт видит вживую, как агент
+        зовёт инструменты (отзывы, стандарты, точки) и приходит к ответу.
+
+        Server-Sent Events. Агент крутится в фоновом потоке и шлёт события в
+        очередь; генератор отдаёт их клиенту. db-сессию трогает только worker —
+        запросный поток лишь читает очередь (без гонок за сессию)."""
+        import json as _json
+        import queue as _queue
+        import threading as _threading
+        from fastapi.responses import StreamingResponse
+
+        q: "_queue.Queue" = _queue.Queue()
+
+        def on_event(ev):
+            q.put(ev)
+
+        def worker():
+            try:
+                res = advisor.ask(db, principal.company_id, body.question,
+                                  on_event=on_event)
+                q.put({"type": "final", "answer": res["answer"]})
+            except Exception as e:
+                q.put({"type": "error", "message": str(e)})
+            finally:
+                q.put(None)  # сигнал конца
+
+        _threading.Thread(target=worker, daemon=True).start()
+
+        def gen():
+            while True:
+                ev = q.get()
+                if ev is None:
+                    break
+                yield f"data: {_json.dumps(ev, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
 
     # ---------------------- Фронтенд (SPA) ----------------------
     # Docker-образ кладёт собранный фронт в frontend/dist. Отдаём его прямо из

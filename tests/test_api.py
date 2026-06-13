@@ -1,5 +1,7 @@
 """Тесты HTTP-API: регистрация/вход, RBAC, изоляция тенантов, чат через API."""
 
+import json
+
 
 def _register(client, slug="acme", email="owner@acme.io", pw="secret1"):
     r = client.post("/api/auth/register-company", json={
@@ -292,11 +294,51 @@ def test_command_center_reviews_flow(client):
     assert cc["pulse"]["positive"] >= 1
     assert cc["problems"], "должны выделиться главные боли"
     assert len(cc["recent"]) == 8
-    assert cc["points"][0]["reviews_count"] == 8
+    pt = cc["points"][0]
+    assert pt["reviews_count"] == 8
+    # Обогащённые поля точки (для сравнения филиалов в «сети»).
+    assert pt["positive_count"] >= 1
+    assert pt["complaints_count"] >= 1
+    assert pt["avg_rating"] > 0
 
     # Повторная синхронизация не плодит дубли.
     sync2 = client.post(f"/api/points/{point_id}/sync", headers=_auth(owner)).json()
     assert sync2["added"] == 0
+
+
+def test_network_overview_ranks_points(db, monkeypatch):
+    """Сеть из двух филиалов (good/bad) — проблемная точка видна по метрикам."""
+    from product import brain
+    from product.modules import accounts, reviews as rv
+    from product.reviews.source import FakeReviewSource
+
+    # Модель «недоступна» → разбор честно откатывается к оценке (rating).
+    def _boom(*a, **k):
+        raise RuntimeError("llm offline")
+    monkeypatch.setattr(brain, "complete", _boom)
+
+    company, owner = accounts.register_company(
+        db, company_name="Net", slug="net",
+        owner_email="o@net.io", owner_password="secret1", owner_name="")
+    db.commit()
+
+    good = rv.connect_point(db, company.id, name="Good",
+                            url="https://2gis.kz/almaty/firm/111")
+    bad = rv.connect_point(db, company.id, name="Bad",
+                           url="https://2gis.kz/almaty/firm/222")
+    db.commit()
+    rv.sync_and_analyze(db, company.id, good.id,
+                        source=FakeReviewSource(profile="good", prefix="g-"))
+    rv.sync_and_analyze(db, company.id, bad.id,
+                        source=FakeReviewSource(profile="bad", prefix="b-"))
+
+    cc = rv.command_center(db, company.id)
+    pts = {p["name"]: p for p in cc["points"]}
+    assert pts["Good"]["reviews_count"] == 8
+    assert pts["Bad"]["reviews_count"] == 8
+    # Разные профили → проблемная точка хуже по всем метрикам.
+    assert pts["Bad"]["complaints_count"] > pts["Good"]["complaints_count"]
+    assert pts["Good"]["avg_rating"] > pts["Bad"]["avg_rating"]
 
 
 def test_connect_point_rejects_bad_url(client):
@@ -315,3 +357,73 @@ def test_employee_cannot_access_command_center(client):
     assert client.get("/api/command-center", headers=_auth(emp)).status_code == 403
     assert client.post("/api/points", headers=_auth(emp),
                        json={"name": "X", "url": "123"}).status_code == 403
+
+
+class _FinalLLM:
+    """Провайдер-заглушка: сразу отдаёт финальный ответ без вызова инструментов."""
+    def call(self, system, messages, tools):
+        return {"text": "Вывод: сеть работает штатно.", "tool_calls": [],
+                "stop_reason": "end_turn",
+                "raw_content": [{"type": "text", "text": "Вывод: сеть работает штатно."}]}
+
+
+def test_advisor_endpoint(client, monkeypatch):
+    from product import brain
+    monkeypatch.setattr(brain, "get_provider", lambda *a, **k: _FinalLLM())
+    owner = _register(client)["access_token"]
+    r = client.post("/api/advisor", headers=_auth(owner),
+                    json={"question": "Как дела в сети?"})
+    assert r.status_code == 200, r.text
+    assert "штатно" in r.json()["answer"]
+
+
+def test_employee_cannot_access_advisor(client):
+    owner = _register(client)["access_token"]
+    client.post("/api/users", headers=_auth(owner), json={
+        "email": "e2@acme.io", "password": "secret1", "role": "employee"})
+    emp = client.post("/api/auth/login", json={
+        "slug": "acme", "email": "e2@acme.io", "password": "secret1"}).json()["access_token"]
+    assert client.post("/api/advisor", headers=_auth(emp),
+                       json={"question": "?"}).status_code == 403
+
+
+class _ToolThenFinalLLM:
+    """Провайдер-заглушка: сначала зовёт инструмент, затем отдаёт финал.
+    Нужен, чтобы стрим выдал событие tool_call перед ответом."""
+    def __init__(self):
+        self.i = 0
+
+    def call(self, system, messages, tools):
+        self.i += 1
+        if self.i == 1:
+            cid = "call_network_overview"
+            return {"text": "", "stop_reason": "tool_use",
+                    "tool_calls": [{"id": cid, "name": "network_overview", "input": {}}],
+                    "raw_content": [{"type": "tool_use", "id": cid,
+                                     "name": "network_overview", "input": {}}]}
+        text = "Вывод: сеть работает штатно."
+        return {"text": text, "tool_calls": [], "stop_reason": "end_turn",
+                "raw_content": [{"type": "text", "text": text}]}
+
+
+def test_advisor_stream_emits_thoughts_and_final(client, monkeypatch):
+    """SSE-стрим «мыслей»: в потоке есть вызов инструмента и финальный ответ."""
+    from product import brain
+    monkeypatch.setattr(brain, "get_provider", lambda *a, **k: _ToolThenFinalLLM())
+    owner = _register(client)["access_token"]
+
+    events = []
+    with client.stream("POST", "/api/advisor/stream", headers=_auth(owner),
+                       json={"question": "Как дела в сети?"}) as r:
+        assert r.status_code == 200, r.text
+        for line in r.iter_lines():
+            if not line:
+                continue
+            text = line if isinstance(line, str) else line.decode()
+            if text.startswith("data:"):
+                events.append(json.loads(text[5:].strip()))
+
+    types = [e["type"] for e in events]
+    assert "tool_call" in types
+    finals = [e for e in events if e["type"] == "final"]
+    assert finals and "штатно" in finals[0]["answer"]
