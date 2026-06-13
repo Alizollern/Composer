@@ -350,3 +350,30 @@ class DigestOut(BaseModel):
     top_problems: List[ProblemOut] = []
     summary: str = ""
     has_data: bool = False
+
+
+# ---- AI-соавтор стандартов ----
+class GapSuggestionOut(BaseModel):
+    title: str
+    rationale: str = ""
+    questions: List[str] = []
+
+
+class SuggestStandardsOut(BaseModel):
+    has_gaps: bool = False
+    count: int = 0
+    suggestions: List[GapSuggestionOut] = []
+
+
+class DraftStandardIn(BaseModel):
+    instruction: str
+
+
+class DraftStandardOut(BaseModel):
+    title: str
+    category: str = ""
+    content: str
+
+
+class ResolveGapOut(BaseModel):
+    ok: bool = True

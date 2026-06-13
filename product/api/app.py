@@ -27,7 +27,7 @@ from product.auth.deps import (
     require_owner, require_manager, require_employee,
 )
 from product.auth.security import create_access_token
-from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews, advisor, digest
+from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews, advisor, digest, coauthor
 from product.modules.accounts import AccountError
 from product.modules.onboarding import QuizError
 from product.auth import ROLE_EMPLOYEE
@@ -563,6 +563,38 @@ def create_app() -> FastAPI:
         """Сводка собственнику: пульс сети, тревоги по проседающим точкам и
         короткий брифинг. Цифры считаются детерминированно; текст — поверх них."""
         return digest.build_digest(db, principal.company_id)
+
+    # ---------------------- AI-соавтор стандартов ----------------------
+    @app.get("/api/coauthor/suggestions", response_model=s.SuggestStandardsOut)
+    def coauthor_suggestions(principal: Principal = Depends(require_manager),
+                             db: Session = Depends(get_db)):
+        """Что дописать в стандарты — из реальных пробелов (вопросов без ответа)."""
+        return coauthor.suggest_from_gaps(db, principal.company_id)
+
+    @app.post("/api/coauthor/draft", response_model=s.DraftStandardOut)
+    def coauthor_draft(body: s.DraftStandardIn,
+                       principal: Principal = Depends(require_manager),
+                       db: Session = Depends(get_db)):
+        """Черновик стандарта по указанию собственника (не сохраняется сам)."""
+        try:
+            return coauthor.draft_standard(db, principal.company_id,
+                                           instruction=body.instruction)
+        except coauthor.CoAuthorError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        except Exception as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                                f"Соавтор временно недоступен: {e}")
+
+    @app.post("/api/gaps/{gap_id}/resolve", response_model=s.ResolveGapOut)
+    def coauthor_resolve_gap(gap_id: str,
+                             principal: Principal = Depends(require_manager),
+                             db: Session = Depends(get_db)):
+        """Отметить пробел закрытым (стандарт дописан)."""
+        try:
+            coauthor.resolve_gap(db, principal.company_id, gap_id)
+        except KeyError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Пробел не найден")
+        return s.ResolveGapOut(ok=True)
 
     # ---------------------- Фронтенд (SPA) ----------------------
     # Docker-образ кладёт собранный фронт в frontend/dist. Отдаём его прямо из

@@ -447,3 +447,24 @@ def test_employee_cannot_access_digest(client):
     emp = client.post("/api/auth/login", json={
         "slug": "acme", "email": "e3@acme.io", "password": "secret1"}).json()["access_token"]
     assert client.get("/api/digest", headers=_auth(emp)).status_code == 403
+
+
+def test_coauthor_suggestions_empty(client):
+    """Без пробелов соавтор честно отвечает «дыр нет»."""
+    owner = _register(client)["access_token"]
+    r = client.get("/api/coauthor/suggestions", headers=_auth(owner))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["has_gaps"] is False
+    assert body["suggestions"] == []
+
+
+def test_employee_cannot_access_coauthor(client):
+    owner = _register(client)["access_token"]
+    client.post("/api/users", headers=_auth(owner), json={
+        "email": "e4@acme.io", "password": "secret1", "role": "employee"})
+    emp = client.post("/api/auth/login", json={
+        "slug": "acme", "email": "e4@acme.io", "password": "secret1"}).json()["access_token"]
+    assert client.get("/api/coauthor/suggestions", headers=_auth(emp)).status_code == 403
+    assert client.post("/api/coauthor/draft", headers=_auth(emp),
+                       json={"instruction": "x"}).status_code == 403

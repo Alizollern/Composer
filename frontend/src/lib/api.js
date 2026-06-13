@@ -147,6 +147,13 @@ export const api = {
     get: () => j("/api/digest"),
   },
 
+  // --- AI-соавтор стандартов ---
+  coauthor: {
+    suggestions: () => j("/api/coauthor/suggestions"),
+    draft: (instruction) => j("/api/coauthor/draft", { method: "POST", body: JSON.stringify({ instruction }) }),
+    resolveGap: (gapId) => j(`/api/gaps/${gapId}/resolve`, { method: "POST" }),
+  },
+
   // --- Цифровой опер-дир (агент с инструментами) ---
   advisor: {
     ask: (question) => j("/api/advisor", { method: "POST", body: JSON.stringify({ question }) }),

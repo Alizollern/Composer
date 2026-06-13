@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Outlet, NavLink } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
-import { MessageSquare, BookOpen, GraduationCap, Map, Users, LogOut, Menu, X, Hexagon, ScrollText, Gauge, Sparkles, Bell } from "lucide-react";
+import { MessageSquare, BookOpen, GraduationCap, Map, Users, LogOut, Menu, X, Hexagon, ScrollText, Gauge, Sparkles, Bell, PenLine } from "lucide-react";
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -13,6 +13,7 @@ export default function Layout() {
     const items = [
       { path: "/app/chat", label: "Ассистент", icon: MessageSquare, roles: ["employee", "manager", "owner"] },
       { path: "/app/knowledge", label: "База знаний", icon: BookOpen, roles: ["employee", "manager", "owner"] },
+      { path: "/app/coauthor", label: "Соавтор стандартов", icon: PenLine, roles: ["manager", "owner"] },
       { path: "/app/learning", label: "Обучение", icon: GraduationCap, roles: ["employee", "manager", "owner"] },
       { path: "/app/digest", label: "Сводка", icon: Bell, roles: ["manager", "owner"] },
       { path: "/app/command-center", label: "Командный центр", icon: Gauge, roles: ["manager", "owner"] },
