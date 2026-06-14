@@ -212,10 +212,16 @@ class GeminiProvider(LLMProvider):
                     if b.get("type") == "text" and b.get("text"):
                         parts.append(types.Part(text=b["text"]))
                     elif b.get("type") == "tool_use":
-                        parts.append(types.Part(
+                        part = types.Part(
                             function_call=types.FunctionCall(
                                 id=b.get("id"), name=b.get("name"),
-                                args=b.get("input") or {})))
+                                args=b.get("input") or {}))
+                        # возвращаем метку рассуждения, если она была — этого
+                        # требует Gemini для многошаговых вызовов инструментов
+                        sig = b.get("thought_signature")
+                        if sig is not None:
+                            part.thought_signature = sig
+                        parts.append(part)
                 if parts:
                     contents.append(types.Content(role="model", parts=parts))
             elif role == "assistant" and isinstance(content, str):
@@ -271,8 +277,15 @@ class GeminiProvider(LLMProvider):
                 cid = getattr(fc, "id", None) or f"gemini_{uuid.uuid4().hex[:12]}"
                 args = dict(fc.args) if fc.args else {}
                 tool_calls.append({"id": cid, "name": fc.name, "input": args})
-                raw_content.append({"type": "tool_use", "id": cid,
-                                    "name": fc.name, "input": args})
+                block = {"type": "tool_use", "id": cid,
+                         "name": fc.name, "input": args}
+                # Gemini 2.5 (thinking) возвращает непрозрачную метку рассуждения
+                # на каждом вызове инструмента; её ОБЯЗАТЕЛЬНО вернуть в истории
+                # на следующих шагах, иначе 400 INVALID_ARGUMENT.
+                sig = getattr(part, "thought_signature", None)
+                if sig is not None:
+                    block["thought_signature"] = sig
+                raw_content.append(block)
 
         return {
             "text": "\n".join(text_parts),
