@@ -509,3 +509,42 @@ def test_employee_cannot_access_actions(client):
     assert client.get("/api/actions", headers=_auth(emp)).status_code == 403
     assert client.post("/api/actions", headers=_auth(emp),
                        json={"title": "x"}).status_code == 403
+
+
+def test_competitors_sync_and_view(client):
+    """Подключить точку → найти конкурентов (фейк-источник) → собрать сравнение."""
+    owner = _register(client)["access_token"]
+    p = client.post("/api/points", headers=_auth(owner),
+                    json={"name": "Зал на Абая",
+                          "url": "https://2gis.kz/almaty/firm/70000001006012345"})
+    point_id = p.json()["id"]
+
+    # Пока не синхронизировали — данных нет.
+    assert client.get("/api/competitors", headers=_auth(owner)).json()["has_data"] is False
+
+    # Синхронизация (по умолчанию офлайн — FakeCompetitorSource).
+    sync = client.post(f"/api/competitors/{point_id}/sync", headers=_auth(owner))
+    assert sync.status_code == 200, sync.text
+    assert sync.json()["added"] >= 1
+
+    view = client.get("/api/competitors", headers=_auth(owner)).json()
+    assert view["has_data"] is True
+    block = view["points"][0]
+    assert block["point_name"] == "Зал на Абая"
+    assert block["competitors"], "конкуренты должны появиться"
+    assert block["status"] in ("behind", "close", "leading", "unknown")
+
+
+def test_competitors_sync_unknown_point_404(client):
+    owner = _register(client)["access_token"]
+    assert client.post("/api/competitors/nope/sync",
+                       headers=_auth(owner)).status_code == 404
+
+
+def test_employee_cannot_access_competitors(client):
+    owner = _register(client)["access_token"]
+    client.post("/api/users", headers=_auth(owner), json={
+        "email": "e6@acme.io", "password": "secret1", "role": "employee"})
+    emp = client.post("/api/auth/login", json={
+        "slug": "acme", "email": "e6@acme.io", "password": "secret1"}).json()["access_token"]
+    assert client.get("/api/competitors", headers=_auth(emp)).status_code == 403

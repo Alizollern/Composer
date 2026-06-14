@@ -27,7 +27,7 @@ from product.auth.deps import (
     require_owner, require_manager, require_employee,
 )
 from product.auth.security import create_access_token
-from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews, advisor, digest, coauthor, actions
+from product.modules import accounts, knowledge as kb, chat, onboarding, tracks, reviews, advisor, digest, coauthor, actions, competitors
 from product.modules.accounts import AccountError
 from product.modules.onboarding import QuizError
 from product.auth import ROLE_EMPLOYEE
@@ -656,6 +656,32 @@ def create_app() -> FastAPI:
             actions.delete_action(db, principal.company_id, action_id)
         except KeyError:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Задача не найдена")
+
+    # ---------------------- Конкуренты (разведка рынка) ----------------------
+    @app.get("/api/competitors", response_model=s.CompetitorsViewOut)
+    def competitors_view(point_id: str = "",
+                         principal: Principal = Depends(require_manager),
+                         db: Session = Depends(get_db)):
+        """Сравнение наших точек с соседними заведениями (рейтинг, сильные/слабые)."""
+        return competitors.build_view(db, principal.company_id,
+                                      point_id=point_id or None)
+
+    @app.post("/api/competitors/{point_id}/sync",
+              response_model=s.SyncCompetitorsOut)
+    def competitors_sync(point_id: str,
+                         principal: Principal = Depends(require_manager),
+                         db: Session = Depends(get_db)):
+        """Найти/обновить конкурентов рядом с точкой (источник за адаптером)."""
+        try:
+            res = competitors.sync_competitors(db, principal.company_id, point_id)
+        except KeyError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Точка не найдена")
+        except competitors.CompetitorError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        except Exception as e:  # сеть/каталог 2GIS отвалился — честная 502
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                                f"Источник конкурентов недоступен: {e}")
+        return s.SyncCompetitorsOut(**res)
 
     # ---------------------- Фронтенд (SPA) ----------------------
     # Docker-образ кладёт собранный фронт в frontend/dist. Отдаём его прямо из

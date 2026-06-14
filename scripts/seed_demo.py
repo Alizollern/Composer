@@ -27,8 +27,10 @@ sys.path.insert(0, str(ROOT))
 from product.db.session import session_scope, get_engine, init_db  # noqa: E402
 from product.modules import accounts, knowledge as kb, tracks      # noqa: E402
 from product.modules import reviews as reviews_mod                 # noqa: E402
+from product.modules import competitors as competitors_mod         # noqa: E402
 from product.modules.accounts import AccountError                  # noqa: E402
 from product.reviews.source import FakeReviewSource                # noqa: E402
+from product.reviews.competitor_source import FakeCompetitorSource  # noqa: E402
 
 SLUG = "bronx-fitness"
 OWNER_EMAIL = "owner@bronx.kz"
@@ -40,13 +42,16 @@ EMP_PASSWORD = "bronx12345"
 # для демо берём из детерминированного FakeReviewSource с разными «профилями» —
 # чтобы экран был всегда наполнен и сразу видно, какой филиал проседает
 # (на проде кнопка «Обновить отзывы» тянет живые). profile: mixed|good|bad.
+# profile — профиль ОТЗЫВОВ (good/mixed/bad); comp — профиль КОНКУРЕНТОВ рядом
+# (tough=соседи сильнее, leading=мы лидер, mixed=вперемешку). Подобраны так,
+# чтобы история сходилась: где у нас плохие отзывы — там сильные конкуренты.
 POINTS = [
-    {"name": "Bronx Fitness — Абая", "profile": "mixed", "prefix": "abay-",
-     "url": "https://2gis.kz/almaty/firm/70000001019283746"},
-    {"name": "Bronx Fitness — Достык", "profile": "good", "prefix": "dostyk-",
-     "url": "https://2gis.kz/almaty/firm/70000001019283747"},
-    {"name": "Bronx Fitness — Сатпаева", "profile": "bad", "prefix": "satpaev-",
-     "url": "https://2gis.kz/almaty/firm/70000001019283748"},
+    {"name": "Bronx Fitness — Абая", "profile": "mixed", "comp": "mixed",
+     "prefix": "abay-", "url": "https://2gis.kz/almaty/firm/70000001019283746"},
+    {"name": "Bronx Fitness — Достык", "profile": "good", "comp": "leading",
+     "prefix": "dostyk-", "url": "https://2gis.kz/almaty/firm/70000001019283747"},
+    {"name": "Bronx Fitness — Сатпаева", "profile": "bad", "comp": "tough",
+     "prefix": "satpaev-", "url": "https://2gis.kz/almaty/firm/70000001019283748"},
 ]
 
 DOCS = [
@@ -200,8 +205,13 @@ def main() -> None:
             result = reviews_mod.sync_and_analyze(
                 db, company.id, point.id,
                 source=FakeReviewSource(profile=p["profile"], prefix=p["prefix"]))
+            # Конкуренты рядом с точкой (для экрана «Конкуренты»).
+            comp = competitors_mod.sync_competitors(
+                db, company.id, point.id,
+                source=FakeCompetitorSource(profile=p["comp"], prefix=p["prefix"]))
+            db.commit()
             print(f"  ✅ «{p['name']}»: загружено {result['added']}, "
-                  f"разобрано {result['analyzed']}")
+                  f"разобрано {result['analyzed']}, конкурентов {comp['added']}")
 
     print("\n" + "=" * 64)
     print("  ДЕМО-КОМПАНИЯ ГОТОВА — можно показывать клиенту")
@@ -231,6 +241,11 @@ def main() -> None:
     print("   • Войди владельцем → «Сводка».")
     print("   • Видно брифинг по сети, тревоги по проседающим точкам")
     print("     (низкий рейтинг/много жалоб) и точки от худшей к лучшей.")
+    print("\n  Конкуренты (разведка рынка):")
+    print("   • Войди владельцем → «Конкуренты».")
+    print("   • Видно, где мы проигрываем соседям (Сатпаева против сильных")
+    print("     залов рядом) и где лидируем (Достык). У каждой точки — за что")
+    print("     хвалят/ругают конкурентов: зоны роста и наши преимущества.")
     print("\n  Цифровой опер-дир (агент с инструментами):")
     print("   • Войди владельцем → «Опер-дир» и спроси свободным текстом:")
     print("     «Какая точка проседает и что делать?» — агент сам поднимет")

@@ -30,7 +30,8 @@ from datetime import datetime, timezone
 from typing import Optional, List
 
 from sqlalchemy import (
-    String, Text, Integer, Boolean, DateTime, ForeignKey, JSON, UniqueConstraint,
+    String, Text, Integer, Float, Boolean, DateTime, ForeignKey, JSON,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import (
     DeclarativeBase, Mapped, mapped_column, relationship,
@@ -448,3 +449,42 @@ class ActionItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     done_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True)
+
+
+class Competitor(Base):
+    """Конкурент рядом с точкой сети — «глаза» опер-дира на рынок.
+
+    Живой опер-директор смотрит, кто работает по соседству, чем они лучше и где
+    слабее, чтобы переманивать клиентов. Для каждой нашей точки храним соседние
+    заведения (из каталога 2GIS и др.): рейтинг, число отзывов, расстояние, а
+    также за что их хвалят (strengths) и ругают (weaknesses) — это карта, где у
+    нас зона роста, а где преимущество.
+
+    Данные приходят из источника за адаптером (CompetitorSource), как и отзывы.
+    Дедуп по (company_id, point_id, external_id) — повторная синхронизация
+    обновляет, а не плодит дубли."""
+
+    __tablename__ = "competitors"
+    __table_args__ = (
+        UniqueConstraint("company_id", "point_id", "external_id",
+                         name="uq_competitor_company_point_ext"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    # Наша точка, рядом с которой стоит этот конкурент.
+    point_id: Mapped[str] = mapped_column(
+        ForeignKey("points.id", ondelete="CASCADE"), index=True)
+    source: Mapped[str] = mapped_column(String(32), default=REVIEW_2GIS)
+    external_id: Mapped[str] = mapped_column(String(128), default="")
+    name: Mapped[str] = mapped_column(String(255))
+    address: Mapped[str] = mapped_column(String(512), default="")
+    distance_m: Mapped[int] = mapped_column(Integer, default=0)  # 0 — неизвестно
+    rating: Mapped[float] = mapped_column(Float, default=0.0)
+    reviews_count: Mapped[int] = mapped_column(Integer, default=0)
+    # За что хвалят / ругают конкурента (списки коротких тем из их отзывов).
+    strengths: Mapped[list] = mapped_column(JSON, default=list)
+    weaknesses: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now)

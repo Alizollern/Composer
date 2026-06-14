@@ -267,14 +267,18 @@ def main() -> None:
                json={"num_questions": 1})
     if r.status_code != 200:
         fail(f"Генерация теста не удалась {r.status_code}: {r.text}")
-    quiz = r.json()["questions"]
+    resp = r.json()
+    quiz_token = resp["quiz_token"]
+    quiz = resp["questions"]
     ok(f"Сгенерирован тест из {len(quiz)} вопрос(ов):")
     for q in quiz:
         info(f"Q: {q['question']}  (варианты: {q['options']})")
-    # Сотрудник отвечает правильно (берём correct_index)
-    answers = [q["correct_index"] for q in quiz]
+    # Правильные ответы НЕ отдаются клиенту (полный тест хранится на сервере,
+    # проверка по токену). Сотрудник «отвечает» как обычный человек — выбираем
+    # первый вариант, а оценку ставит сервер.
+    answers = [0 for _ in quiz]
     r = c.post("/api/quiz/grade", headers=auth(emp_token),
-               json={"quiz": quiz, "answers": answers})
+               json={"quiz_token": quiz_token, "answers": answers})
     grade = r.json()
     ok(f"Результат: {grade['correct']}/{grade['total']} (сдал={grade['passed']})")
 
@@ -302,14 +306,15 @@ def main() -> None:
     r = c.get("/api/my/enrollments", headers=auth(emp_token))
     my = r.json()[0]
     st = my["steps"][0]
-    # Генерируем тест шага через документ и отвечаем верно.
+    # Генерируем тест шага через документ; ответы проверяет сервер по токену.
     r = c.post(f"/api/documents/{doc_id}/quiz", headers=auth(owner_token),
                json={"num_questions": 1})
-    step_quiz = r.json()["questions"]
+    step_resp = r.json()
+    step_quiz = step_resp["questions"]
     r = c.post(
         f"/api/enrollments/{my['enrollment_id']}/steps/{st['id']}/submit",
         headers=auth(emp_token),
-        json={"quiz": step_quiz, "answers": [q["correct_index"] for q in step_quiz]})
+        json={"quiz_token": step_resp["quiz_token"], "answers": [0 for _ in step_quiz]})
     res = r.json()
     ok(f"Шаг сдан: статус={res['step_status']}, счёт={res['score']}, "
        f"трек={res['enrollment_status']}")

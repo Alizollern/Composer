@@ -168,6 +168,15 @@ export const api = {
     remove: (id) => j(`/api/actions/${id}`, { method: "DELETE" }),
   },
 
+  // --- Конкуренты (разведка рынка) ---
+  competitors: {
+    get: (point_id) => {
+      const qs = point_id ? `?point_id=${point_id}` : "";
+      return j(`/api/competitors${qs}`);
+    },
+    sync: (point_id) => j(`/api/competitors/${point_id}/sync`, { method: "POST" }),
+  },
+
   // --- Цифровой опер-дир (агент с инструментами) ---
   advisor: {
     ask: (question) => j("/api/advisor", { method: "POST", body: JSON.stringify({ question }) }),

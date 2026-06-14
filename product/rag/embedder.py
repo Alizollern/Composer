@@ -17,7 +17,9 @@ import hashlib
 import math
 import os
 import re
+import threading
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from typing import List
 
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
@@ -108,13 +110,81 @@ class GeminiEmbedder(Embedder):
         return [_l2_normalize(v) for v in vecs]
 
 
+# --- Кэш эмбеддингов --------------------------------------------------------
+# Эмбеддинг — чистая функция от текста: один и тот же текст всегда даёт один и
+# тот же вектор. Значит, повторные запросы (один вопрос боту, поиск Опер-дира по
+# стандартам) можно не гонять в платную модель, а брать из памяти. Это режет и
+# счёт за API, и задержку. Кэш общий между запросами (модульный) и
+# потокобезопасный — Опер-дир считает в фоновом потоке. Размер ограничен (LRU),
+# чтобы массовый ingest не раздул память. Ключ включает «подпись» эмбеддера
+# (класс+модель+размерность), чтобы вектора разных моделей не смешались.
+
+_CACHE: "OrderedDict[tuple, List[float]]" = OrderedDict()
+_CACHE_LOCK = threading.Lock()
+_CACHE_MAX = int(os.environ.get("EVERGREEN_EMBED_CACHE_MAX", "4096"))
+
+
+class CachingEmbedder(Embedder):
+    """Обёртка над любым эмбеддером с кэшом «текст → вектор».
+
+    Прозрачна: при промахе считает базовым эмбеддером, как раньше. Никогда не
+    меняет результат — только избегает повторных вызовов на тот же текст.
+    """
+
+    def __init__(self, base: Embedder):
+        self.base = base
+        self.dim = base.dim
+        self._sig = (type(base).__name__,
+                     getattr(base, "model", ""), base.dim)
+
+    def _key(self, text: str) -> tuple:
+        return (self._sig, text)
+
+    def embed(self, texts: List[str]) -> List[List[float]]:
+        results: List[List[float]] = [None] * len(texts)  # type: ignore[list-item]
+        misses: List[str] = []
+        miss_pos: List[int] = []
+
+        with _CACHE_LOCK:
+            for i, text in enumerate(texts):
+                key = self._key(text)
+                hit = _CACHE.get(key)
+                if hit is not None:
+                    _CACHE.move_to_end(key)        # отметить как недавно нужный
+                    results[i] = hit
+                else:
+                    misses.append(text)
+                    miss_pos.append(i)
+
+        if misses:
+            # один и тот же текст в батче считаем один раз
+            uniq = list(dict.fromkeys(misses))
+            fresh = self.base.embed(uniq)
+            vec_by_text = dict(zip(uniq, fresh))
+            with _CACHE_LOCK:
+                for text in uniq:
+                    _CACHE[self._key(text)] = vec_by_text[text]
+                    _CACHE.move_to_end(self._key(text))
+                while len(_CACHE) > _CACHE_MAX:
+                    _CACHE.popitem(last=False)      # выкинуть самый старый
+            for pos, text in zip(miss_pos, misses):
+                results[pos] = vec_by_text[text]
+
+        return results
+
+
 def get_embedder() -> Embedder:
     """Выбрать эмбеддер по окружению.
 
     EVERGREEN_EMBEDDER=fake|gemini форсирует выбор. Иначе: gemini, если задан
-    ключ Gemini (прод); по умолчанию — Fake (офлайн/тесты, без сети)."""
+    ключ Gemini (прод); по умолчанию — Fake (офлайн/тесты, без сети).
+    Результат оборачивается в кэш (EVERGREEN_EMBED_CACHE=0 отключает)."""
     choice = os.environ.get("EVERGREEN_EMBEDDER", "").strip().lower()
     has_key = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
     if choice == "gemini" or (choice == "" and has_key):
-        return GeminiEmbedder()
-    return FakeEmbedder()
+        base: Embedder = GeminiEmbedder()
+    else:
+        base = FakeEmbedder()
+    if os.environ.get("EVERGREEN_EMBED_CACHE", "1").strip().lower() in ("0", "false", "no"):
+        return base
+    return CachingEmbedder(base)

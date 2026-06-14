@@ -406,3 +406,42 @@ class ActionOut(BaseModel):
 class ActionListOut(BaseModel):
     items: List[ActionOut] = []
     counts: dict = {}
+
+
+# ---- Конкуренты (конкурентная разведка опер-дира) ----
+class CompetitorOut(BaseModel):
+    id: str
+    name: str
+    address: str = ""
+    distance_m: int = 0
+    rating: float = 0.0
+    reviews_count: int = 0
+    strengths: List[str] = []
+    weaknesses: List[str] = []
+
+
+class PointCompetitionOut(BaseModel):
+    point_id: str
+    point_name: str
+    my_rating: float = 0.0
+    my_reviews_count: int = 0
+    best_competitor_rating: float = 0.0
+    competitors_count: int = 0
+    ahead_of: int = 0
+    status: str = "unknown"
+    verdict: str = ""
+    opportunities: List[str] = []
+    advantages: List[str] = []
+    competitors: List[CompetitorOut] = []
+
+
+class CompetitorsViewOut(BaseModel):
+    has_data: bool = False
+    points: List[PointCompetitionOut] = []
+    summary: str = ""
+
+
+class SyncCompetitorsOut(BaseModel):
+    added: int = 0
+    updated: int = 0
+    total: int = 0
